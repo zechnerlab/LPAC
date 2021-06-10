@@ -1,0 +1,10 @@
+name = "cLNA"
+uuid = "0276019a-e697-4cbe-9635-ac0fc9b57b0f"
+authors = ["Tommaso Bianucci <bianucci@mpi-cbg.de>"]
+version = "0.1.0"
+
+[deps]
+Catalyst = "479239e8-5488-4da2-87a7-35f2df7eef83"
+DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
