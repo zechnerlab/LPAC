@@ -20,7 +20,7 @@ given `durations` timepoints.
                                     durations::Vector{Float64}, 
                                     changes::Vector{Float64},
                                     Nsamples::Int64; 
-                                    timestep::Float64=0.1, 
+                                    timestep::Float64=durations[1]/100, 
                                     seed::Union{Nothing,Int64}=nothing,
                                     exportRawOutput::Bool=false)
     time_all,mm,t_setpoint,val_setpoint = SSA_perturbations(deepcopy(S),
@@ -37,8 +37,8 @@ given `durations` timepoints.
         push!(F, fut)
     end
     # Now prepare to collect the results
-    MM=zeros(length(keys(S.MomDict)),length(time_all))
-    MM2=copy(MM)
+    # MM=zeros(length(keys(S.MomDict)),length(time_all))
+    # MM2=zeros(size(MM))
     # Take care of the raw output
     n = nothing
     if exportRawOutput
@@ -46,22 +46,48 @@ given `durations` timepoints.
         n = [ zeros(Int64, size(n0)) for i=1:Nsamples ]
     end
     #
-    for i=1:Nsamples
+    function fetchMoments(i::Integer, n; verbose::Bool=false)
         res = fetch(F[i])
         if typeof(res)==RemoteException
             throw(res)
         end
         tt, Mi, ts, vs, n_local = res
-        println("SSA simulation # $i")
-        if exportRawOutput
+        verbose && println("Fetch: SSA simulation # $i")
+        if !isnothing(n)
             n[i] = deepcopy(n_local)
         end
-        MM .+= Mi
-        MM2 .+= Mi.^2
+        @assert all(Mi .>= 0)
+        return Mi
+        # MM .+= Mi
+        # MM2 .+= Mi.^2
         # [Mi, Mi.^2] # This must be the last line of the loop block for the reduction to work!
     end
-    MMav=MM/Nsamples
-    MMvar=MM2/(Nsamples-1)-(MM.^2)/(Nsamples*(Nsamples-1))
+    function varm(itr, mean::Array)
+        # @assert length(itr) > 1 "Cannot compute variance on a single value!"
+        v = zeros(size(mean))
+        if length(itr)==1
+            return v
+        end
+        for x in itr
+            @. v += (x - mean)^2
+        end
+        v ./= length(itr)-1
+        return v
+    end
+    momentsGenerator = ( fetchMoments(i, n) for i=1:Nsamples )
+    MMav = mean(momentsGenerator)
+    # @time begin
+    begin
+        MMvar = varm(momentsGenerator, MMav)
+        momentsGenerator2 = ( fetchMoments(i, nothing; verbose=false).^2 for i=1:Nsamples )
+        MM2 = sum(momentsGenerator2)
+    end
+    # @assert all(MM .>= 0)
+    # @assert all(MM2 .>= 0)
+    # MMav = MM/Nsamples
+    # MMvar = ( MM2 - (MM.^2)/Nsamples ) / (Nsamples-1)
+    @assert all(MMav .>= 0) "Moments cannot be negative!"
+    @assert all(MMvar .>= 0) "Variances cannot be negative!"
     return time_all, MMav, MMvar, t_setpoint, val_setpoint, n, MM2/(Nsamples)
 end
 
@@ -76,7 +102,7 @@ Run one SSA trajectory with parameter `changes` (perturbations) at the given
                                     n0::Matrix{Int64}, 
                                     durations::Vector{Float64}, 
                                     changes::Vector{Float64};
-                                    timestep::Float64=0.1, 
+                                    timestep::Float64=durations[1]/100, 
                                     seed::Union{Nothing,Int64}=nothing, 
                                     asserting::Bool=true)
     seed!=nothing ? Random.seed!(seed) : nothing
@@ -87,14 +113,17 @@ Run one SSA trajectory with parameter `changes` (perturbations) at the given
     n_out   = deepcopy(n0) # We want to be able to export the raw output (to compute PDFs)
     t_start=0.
     time_all=Vector{Float64}()
-    moments_all=zeros(Int64,length(compute_moments(S,n0)),0)
+    # moments_all=zeros(Int64,length(compute_moments(S,n0)),0)
+    moments_all=zeros(Float64,length(compute_moments(S,n0)),0) # Avoid Int overflows
     t_setpoint=Vector{Float64}()
     val_setpoint=Vector{Float64}()
     for i=1:LL
         S.transition_classes[1].k *= changes[i]
         timepoints=collect(t_start:timestep:t_start+durations[i])
-        push!(t_setpoint,t_start); push!(val_setpoint,S.transition_classes[1].k/S.transition_classes[2].k)
-        push!(t_setpoint,timepoints[end]); push!(val_setpoint,S.transition_classes[1].k/S.transition_classes[2].k)
+        push!(t_setpoint,t_start); 
+        # push!(val_setpoint,S.transition_classes[1].k/S.transition_classes[2].k)
+        push!(t_setpoint,timepoints[end]); 
+        # push!(val_setpoint,S.transition_classes[1].k/S.transition_classes[2].k)
         n_out, mom_out = SSA(S, n_start, timepoints, full_story=false, asserting=false)
         time_all = [time_all;timepoints]
         moments_all = [moments_all mom_out]
@@ -115,10 +144,14 @@ end
         n,Mi=SSA(S,n0,timepoints,asserting=false)
         # MM .+= Mi
         # MM2 .+= Mi.^2
+        @assert all(Mi .>= 0)
+        @assert all(Mi.^2 .>= 0)
         [Mi, Mi.^2]
     end
     MMav=MM/Nsamples
     MMvar=MM2/(Nsamples-1)-(MM.^2)/(Nsamples*(Nsamples-1))
+    @assert all(MMav .> 0) 
+    @assert all(MMvar .> 0) 
     return MMav, MMvar
 end
 
@@ -135,11 +168,12 @@ end
     seed!=nothing ? Random.seed!(seed) : nothing
     asserting ? assert_model(S,n0) : nothing
     DD,Ncomp=size(n0)
-    CL=length(S.transition_classes)
-    n=copy(n0)
+    CL = length(S.transition_classes)
+    n = copy(n0) # n is [species, compartments]
+    Mom = compute_moments(S,n)
+    g, G = compute_propensities(S, n, Mom) # g is vector of tensors, G is vector of numbers
     rates = [S.transition_classes[i].k for i=1:CL]
-    Mom=compute_moments(S,n)
-    NcompM=[Ncomp]
+    NcompM = [Ncomp]
     if length(timepoints) > 1
         path_flag=false
         TT=length(timepoints)
@@ -158,7 +192,8 @@ end
     r_indices=zeros(Int64,2)
     xc=[zeros(Int64,DD),zeros(Int64,DD)]
     yc=[zeros(Int64,DD),zeros(Int64,DD)]
-    H_weights=zeros(Int64,CL)
+    # H_weights=zeros(Int64,CL)
+    H_weights=zeros(CL)
     H_classes=zeros(CL)
     time_index=2
     simulation_flag=true
@@ -166,7 +201,12 @@ end
     while simulation_flag
         #Evaluate global propensity
         for c=1:CL
-            H_weights[c] = S.transition_classes[c].H(n,Mom)
+            curH = S.transition_classes[c].H
+            if !isnothing(curH)
+                H_weights[c] = curH(n,Mom)
+            else
+                H_weights[c] = G[c]
+            end
             H_classes[c] = rates[c]*float(H_weights[c])
         end
         Htot = sum(H_classes)
@@ -183,7 +223,7 @@ end
         (path_flag && (simtime > timepoints)) ? simulation_flag=false : nothing
         if simulation_flag
             #Compute type and detail of next reaction
-            next_class = climbtower(rand()*Htot,H_classes)
+            next_class = climbtower(rand()*Htot, H_classes)
             class_counter[next_class]+=1
             if S.transition_classes[next_class].rc > 0
                 draw_reactant_indices!(
@@ -194,7 +234,8 @@ end
                     S,
                     next_class,
                     n,
-                    Mom)
+                    Mom,
+                    g[next_class])
             end
             if S.transition_classes[next_class].pc > 0
                 draw_product_compartments!(S.transition_classes[next_class].parameters,yc,xc,S,next_class)#,n,Mom)
@@ -203,12 +244,13 @@ end
             if Mom[1] == NcompM[1]
                 # ...and if we are about to increase the number of compartments...
                 if S.transition_classes[next_class].DeltaN > 0
-                    # ...then enlarge (double) all the data structures that need to be enlarged
+                    # ...then grow (double) all the data structures that need to be enlarged
                     n = [n zeros(Int64,size(n))]
                     NcompM[1]=size(n,2)
+                    grow_propensity_tensors!(g, NcompM[1])
                 end
             end
-            update_all!(S,next_class,r_indices,xc,yc,n,NcompM,Mom)
+            update_all!(S, next_class, r_indices, xc, yc, n, Mom, g, G)
             if path_flag
                 reaction_times[time_index]=simtime
                 MMt[:,time_index]=Mom
@@ -261,55 +303,147 @@ end
 # if the fast_sample_reactants! function is provided, samples the next reacting compartments efficiently
 function draw_reactant_indices!(fast_sample!::Function,
                                 r_indices::Vector{Int64},
-                                propensity_weight::Int64,
+                                propensity_weight::Number,
                                 xc::Vector{Vector{Int64}},
                                 S::System,
                                 next_class::Int64,
                                 n::Matrix{Int64},
                                 Mom::Vector{Int64},
+                                g::Union{Nothing, Vector, Matrix},
                                 )
-    r_indices[2]=0  # necessary to prevent troubles with two compartments ...
-    fast_sample!(r_indices,n,Mom)
-    for i=1:S.transition_classes[next_class].rc
-        for d=1:S.n_species xc[i][d] = n[d,r_indices[i]] end
+    r_indices[2] = 0  # necessary to prevent troubles with two compartments ...
+    fast_sample!(r_indices, n, Mom)
+    @assert r_indices[1]>0 "FATAL: Couldn't sample reactants ($r_indices) for TC=$next_class, total propensity ($propensity_weight) must be wrong!"
+
+    TC = S.transition_classes[next_class]
+    for i=1:TC.rc
+        for d=1:S.n_species 
+            xc[i][d] = n[d, r_indices[i]] 
+        end
     end
+    # if next_class==5
+    #     @assert issorted(r_indices) "r_indices not sorted in class 5"
+    #     if ( g[r_indices...] != TC.g(xc, Mom) ) || xc[1][1]<=0 || xc[2][2]<=0
+    #         @show next_class r_indices g[r_indices...] TC.g(xc, Mom) xc
+    #     end
+    #     @assert g[r_indices...] == TC.g(xc, Mom) "Inconsistent propensity in class 5"
+    #     @assert xc[1][1]>0
+    #     @assert xc[2][2]>0
+    # elseif next_class==6
+    #     @assert issorted(r_indices) "r_indices not sorted in class 6"
+    #     if ( g[r_indices...] != TC.g(xc, Mom) ) || xc[1][2]<=0 || xc[2][1]<=0
+    #         @show next_class r_indices g[r_indices...] TC.g(xc, Mom) xc
+    #     end
+    #     @assert g[r_indices...] == TC.g(xc, Mom) "Inconsistent propensity in class 6"
+    #     @assert xc[1][2]>0
+    #     @assert xc[2][1]>0
+    # end
 end
 
-# if the fast_sample_reactants! function is not provided, samples the next reacting compartments of class c with tower sampling
-function draw_reactant_indices!(fast_sample!::Nothing,r_indices::Vector{Int64},propensity_weight::Int64,
+# if the fast_sample_reactants! function is not provided, use the default ones!
+function draw_reactant_indices!(fast_sample!::Nothing,
+                                r_indices::Vector{Int64},
+                                propensity_weight::Number,
                                 xc::Vector{Vector{Int64}},
-                                S::System,next_class::Int64,
-                                n::Matrix{Int64},Mom::Vector{Int64})
-    #fill!(r_indices,0)
+                                S::System,
+                                next_class::Int64,
+                                n::Matrix{Int64},
+                                Mom::Vector{Int64},
+                                g::Nothing, # Here we are not using the pre-computed propensities
+                                )
     Ncomp = Mom[1]
     DD=size(n,1)
-    if S.transition_classes[next_class].rc == 1
-        r_indices[1]=1
-        for d=1:DD xc[1][d]=n[d,1] end
-        val = S.transition_classes[next_class].g(xc)
-        rv=rand()*propensity_weight
-        while val < rv
-            r_indices[1]+=1
-            for d=1:DD xc[1][d]=n[d,r_indices[1]] end
-            val += S.transition_classes[next_class].g(xc)
-        end
-    elseif S.transition_classes[next_class].rc == 2
-        r_indices[1]=1 ; for d=1:DD xc[1][d]=n[d,1] end
-        r_indices[2]=2 ; for d=1:DD xc[2][d]=n[d,2] end
-        val = S.transition_classes[next_class].g(xc)
-        rv=rand()*propensity_weight
-        while val < rv
-            if r_indices[2] != Ncomp
-                r_indices[2] += 1
-            else
-                r_indices[1] += 1
-                r_indices[2] = r_indices[1]+1
-                for d=1:DD xc[1][d]=n[d,r_indices[1]] end
-            end
-            for d=1:DD xc[2][d]=n[d,r_indices[2]] end
-            val += S.transition_classes[next_class].g(xc)
-        end
+    TC = S.transition_classes[next_class]
+    if TC.rc == 1
+        fast_sample! = 
+            (r_indices::Vector{Int64}, n::Matrix{Int64}, Mom::Vector{Int64}) -> 
+            fast_sample_generic_unary!(r_indices, n, Mom, Ncomp, 
+                                        TC.g, 
+                                        propensity_weight
+                                        )
+    elseif TC.rc == 2
+        fast_sample! = 
+            (r_indices::Vector{Int64}, n::Matrix{Int64}, Mom::Vector{Int64}) -> 
+            fast_sample_generic_binary!(r_indices, n, Mom, Ncomp, 
+                                        TC.g, 
+                                        propensity_weight
+                                        )
     end
+    draw_reactant_indices!(
+                            fast_sample!, 
+                            r_indices,
+                            propensity_weight,
+                            xc,
+                            S,
+                            next_class,
+                            n,
+                            Mom,
+                            g,
+                            )
+end
+function draw_reactant_indices!(fast_sample!::Nothing,
+                                r_indices::Vector{Int64},
+                                propensity_weight::Number,
+                                xc::Vector{Vector{Int64}},
+                                S::System,
+                                next_class::Int64,
+                                n::Matrix{Int64},
+                                Mom::Vector{Int64},
+                                g::Vector,
+                                )
+    Ncomp = Mom[1]
+    DD=size(n,1)
+    TC = S.transition_classes[next_class]
+    @assert TC.rc == 1 "ERROR: Number of reactants must be 1"
+    fast_sample! = 
+        (r_indices::Vector{Int64}, n::Matrix{Int64}, Mom::Vector{Int64}) -> 
+        fast_sample_generic_unary!(r_indices, n, Mom, Ncomp, 
+                                    g, 
+                                    propensity_weight
+                                    )
+    draw_reactant_indices!(
+                            fast_sample!, 
+                            r_indices,
+                            propensity_weight,
+                            xc,
+                            S,
+                            next_class,
+                            n,
+                            Mom,
+                            g,
+                            )
+end
+function draw_reactant_indices!(fast_sample!::Nothing,
+                                r_indices::Vector{Int64},
+                                propensity_weight::Number,
+                                xc::Vector{Vector{Int64}},
+                                S::System,
+                                next_class::Int64,
+                                n::Matrix{Int64},
+                                Mom::Vector{Int64},
+                                g::Matrix,
+                                )
+    Ncomp = Mom[1]
+    DD=size(n,1)
+    TC = S.transition_classes[next_class]
+    @assert TC.rc == 2 "ERROR: Number of reactants must be 2"
+    fast_sample! = 
+        (r_indices::Vector{Int64}, n::Matrix{Int64}, Mom::Vector{Int64}) -> 
+        fast_sample_generic_binary!(r_indices, n, Mom, Ncomp, 
+                                    g, 
+                                    propensity_weight
+                                    )
+    draw_reactant_indices!(
+                            fast_sample!, 
+                            r_indices,
+                            propensity_weight,
+                            xc,
+                            S,
+                            next_class,
+                            n,
+                            Mom,
+                            g,
+                            )
 end
 
 # sample product compartments
@@ -333,72 +467,345 @@ function recursive_exponentiation(x::Int64,exponent::Int64)
     end
 end
 
+"""
+    grow_propensity_tensors!(g::PropensitySet, newN::Int64)
+
+Increase the size of the propensity tensors. To be used when the number of
+compartments grows over the current tensor size.
+"""
+function grow_propensity_tensors!(g::PropensitySet, newN::Int64)
+    for (i, gcl) in enumerate(g)
+        if isnothing(gcl)
+            continue
+        end
+        valueType = typeof(gcl[1])
+        numDimensions = length(size(gcl))
+        curNumCompartments = size(gcl, 1)
+        @assert newN >= curNumCompartments """
+            ERROR: This function can only grow the propensity tensors, not shrink them!
+            """
+        curGcl = deepcopy(gcl)
+        dimensions = repeat([newN], numDimensions)
+        g[i] = zeros(valueType, dimensions...)
+        curSizeRange = repeat([1:curNumCompartments], numDimensions)
+        g[i][curSizeRange...] .= curGcl
+    end
+end
+
 # updates population state n and moments vector Mom with the drawn class and the reactant and product compartments
 function update_all!(S::System, next_class::Int64,
                     r_indices::Vector{Int64},
                     xc::Vector{Vector{Int64}}, yc::Vector{Vector{Int64}},
-                    n::Matrix{Int64}, NcompM::Vector{Int64}, Mom::Vector{Int64})
-    Ncomp=Mom[1]
-    # Here we update the moments
+                    n::Matrix{Int64}, Mom::Vector{Int64}, 
+                    g::PropensitySet, G::Vector)
+    # @show next_class #debug
+    NcompPre=Mom[1]
+    MomPre = deepcopy(Mom)
+    transitionClass = S.transition_classes[next_class]
+    numReactants = transitionClass.rc
+    # Here we update the moments, the propensities and the state
+    update_moments!(Mom, S, NcompPre, next_class, xc, yc)
+    NcompPost=Mom[1]
+    newCompartments, changedCompartments, swaps = update_state!(n, S, NcompPre, next_class, r_indices, yc)
+    update_propensities!(g, G, S, NcompPre, NcompPost, numReactants, r_indices, n, MomPre, 
+        newCompartments, changedCompartments, swaps)
+    # _checkMomentsConsistency(Mom, n) #debug
+end
+
+function update_moments!(
+                            Mom::Vector{Int64}, 
+                            S::System, 
+                            Ncomp::Int64,
+                            transitionClassIndex::Int64, 
+                            xc::Vector{Vector{Int64}}, 
+                            yc::Vector{Vector{Int64}},
+                            )
+    transitionClass = S.transition_classes[transitionClassIndex]
     # First we remove the reactants contributions...
-    for r=1:S.transition_classes[next_class].rc
+    for r=1:transitionClass.rc
         for l=1:length(Mom)
             val=1
             for d=1:S.n_species
-                val *= recursive_exponentiation(xc[r][d],S.MomDict[l][d]) # xc[r][d]^S.MomDict[l][d]
+                val *= recursive_exponentiation(xc[r][d], S.MomDict[l][d]) # xc[r][d]^S.MomDict[l][d]
             end
             Mom[l] -= val
         end
     end
     # ...then we add the products contributions
-    for p=1:S.transition_classes[next_class].pc
+    for p=1:transitionClass.pc
         for l=1:length(Mom)
             val=1
             for d=1:S.n_species
                 pv = yc[p][d]
-                @assert pv>=0 """
-                FATAL: Species has gone negative in product compartment!
-                Reaction: $(next_class)
-                Prod Compartment: $p
-                Species: $d
-                x[$d] = $(pv)
-                """
-                val *= recursive_exponentiation(yc[p][d],S.MomDict[l][d])  # yc[p][d]^S.MomDict[l][d]
+                # @assert pv>=0 """
+                # FATAL: Species has gone negative in product compartment!
+                # Reaction: $(transitionClassIndex)
+                # Prod Compartment: $p
+                # Species: $d
+                # x[$d] = $(pv)
+                # """
+                val *= recursive_exponentiation(yc[p][d], S.MomDict[l][d])  # yc[p][d]^S.MomDict[l][d]
             end
             Mom[l] += val
         end
     end
+end
+
+function update_propensities!(
+            g::PropensitySet, G::Vector,
+            S::System,
+            NcompPre::Int64,
+            NcompPost::Int64,
+            numReactantsChange::Int64,
+            r_indices::Vector{Int64},
+            n::Matrix{Int64},
+            Mom::Vector{Int64},
+            newCompartments::Vector{Int64},
+            changedCompartments::Vector{Int64},
+            swaps::Vector{Pair{Int64,Int64}},
+            )
+    # For each transition class:
+    # (1) First we want to remove the contributions of all compartments that were
+    # either removed or had their content changed.
+    # (2) Then we want to update the propensity tensor 'g[transitionClassIndex]'
+    # by swapping the compartments that changed their index and updating the 
+    # propensities of those that changed their content.
+    # (3) Finally we want to add the contributions of all compartments that had their
+    # content changed and those that were added.
+    removedCompartments = getindex.(swaps, 2)
+    remI = vcat(changedCompartments, removedCompartments) # This order ensures that
+    addI = vcat(changedCompartments, newCompartments) # both remI,addI are sorted
+    if !isempty(removedCompartments) && !(NcompPre in removedCompartments)
+        push!(remI, NcompPre)
+        push!(addI, removedCompartments...)
+    end
+    for (transitionClassIndex, transitionClass) in enumerate(S.transition_classes)
+        numReactants = transitionClass.rc
+        if ( isnothing(g[transitionClassIndex]) 
+            || numReactants==0
+            )
+            continue
+        end
+        @assert numReactants<=2 "ERROR: Transition classes using 3 or more reactants are not supported!"
+        # Step (1): removal of old contributions
+        # @show remI #debug
+        G[transitionClassIndex] -= _computeCompPropensityContribution(
+                                        g[transitionClassIndex],
+                                        NcompPre,
+                                        remI...,
+                                        )
+        # Step (2): update of the propensity tensor
+        # @show swaps #debug
+        # _swapCompartmentIndexInPropensityTensor!.(
+        #                                 Ref(g[transitionClassIndex]), 
+        #                                 NcompPre,
+        #                                 swaps,
+        #                                 )
+        # @show changedCompartments #debug
+        _updatePropensityTensor!.(
+                                Ref(g[transitionClassIndex]),
+                                Ref(n),
+                                Ref(Mom),
+                                transitionClass.g,
+                                NcompPost,
+                                addI,
+                                )
+        # Step (3): addition of new contributions
+        # @show addI #debug
+        G[transitionClassIndex] += _computeCompPropensityContribution(
+                                        g[transitionClassIndex],
+                                        NcompPost,
+                                        addI...
+                                        )
+        # # DEBUG: Check for consistency
+        # if NcompPost>1 && (transitionClassIndex in [5,6])
+        #     trueG = sum( [ transitionClass.g([n[:,i], n[:,j]], Mom) for i=1:NcompPost for j=i+1:NcompPost ] )
+        #     sumg = sum(g[transitionClassIndex][1:NcompPost, 1:NcompPost])
+        #     @assert equal(sumg, G[transitionClassIndex]) """
+        #         FATAL: G is not consistent with the propensity tensor g!
+        #         G[$transitionClassIndex] = $(G[transitionClassIndex])
+        #         sum(g[$transitionClassIndex]) = $(sumg)
+        #         trueG = $trueG
+        #         remI = $remI
+        #         addI = $addI
+        #         swaps = $swaps
+        #         """
+        #     @assert equal(sumg, trueG) """
+        #         FATAL: the propensity tensor g is not consistent with the true G!
+        #         sum(g[$transitionClassIndex]) = $(sumg)
+        #         trueG = $trueG
+        #         G[$transitionClassIndex] = $(G[transitionClassIndex])
+        #         NcompPre = $NcompPre
+        #         NcompPost = $NcompPost
+        #         remI = $remI
+        #         addI = $addI
+        #         swaps = $swaps
+        #         """
+        # end
+    end
+end
+
+function update_state!(
+                        n::Matrix{Int64},
+                        S::System, 
+                        Ncomp::Int64,
+                        transitionClassIndex::Int64,
+                        r_indices::Vector{Int64},
+                        yc::Vector{Vector{Int64}},
+                        )
+    transitionClass = S.transition_classes[transitionClassIndex]
+    numReactants = transitionClass.rc
+    swaps = Vector{Pair{Int64, Int64}}() # This is just cells being moved but unchanged
+    changedCompartments = Vector{Int64}() # This is new cells with changed content
+    newCompartments = Vector{Int64}()
+
     # Now manage the {in,de}crease in the number of cells, updating the state
     # matrix accordingly + update the contents according to the reaction
-    if S.transition_classes[next_class].DeltaN == -1
-        pos_overwrite=max(r_indices[1],r_indices[2])
-        for j=1:S.n_species
-            n[j,pos_overwrite]=n[j,Ncomp]
+    if transitionClass.DeltaN == -1
+        pos_overwrite = max(r_indices[1], r_indices[2])
+        n[:, pos_overwrite] .= n[:, Ncomp]
+        push!(swaps, Ncomp => pos_overwrite)
+
+        if numReactants == 2
+            n[:, r_indices[1]] .= yc[1][:]
+            push!(changedCompartments, r_indices[1])
         end
-        if S.transition_classes[next_class].rc == 2
-            for j=1:S.n_species
-                n[j,r_indices[1]] = yc[1][j]
-            end
+
+    elseif transitionClass.DeltaN == 0
+        for i=1:numReactants
+            n[:, r_indices[i]] .= yc[i][:]
+            push!(changedCompartments, r_indices[i])
         end
-    elseif S.transition_classes[next_class].DeltaN == 0
-        for i=1:S.transition_classes[next_class].rc
-            for j=1:S.n_species
-                n[j,r_indices[i]] = yc[i][j]
-            end
-        end
-    elseif S.transition_classes[next_class].DeltaN == 1
-        for j=1:S.n_species
-            n[j,Ncomp+1] = yc[1][j]
-        end
-        if S.transition_classes[next_class].rc == 1
-            for j=1:S.n_species
-                n[j,r_indices[1]] = yc[2][j]
-            end
+
+    elseif transitionClass.DeltaN == 1
+        n[:,Ncomp+1] .= yc[1][:]
+        push!(newCompartments, Ncomp+1)
+        if numReactants == 1
+            n[:, r_indices[1]] .= yc[2][:]
+            push!(changedCompartments, r_indices[1])
         end
     else
         error()
     end
-    # _checkMomentsConsistency(Mom, n) #debug
+    return newCompartments, changedCompartments, swaps
+end
+
+# In case we pass an empty collection, their contribution is 0
+function _computeCompPropensityContribution(g::Vector, Ncomp::Int64)
+    return 0
+end
+function _computeCompPropensityContribution(g::Matrix, Ncomp::Int64)
+    return 0
+end
+function _computeCompPropensityContribution(g::Nothing, Ncomp::Int64, I...)
+    return 0
+end
+function _computeCompPropensityContribution(g::Vector, Ncomp::Int64, i::Int64)
+    return g[i]
+end
+function _computeCompPropensityContribution(g::Matrix, Ncomp::Int64, i::Int64)
+    return sum( g[1:i-1, i] ) + sum( g[i, i+1:Ncomp] )
+end
+function _computeCompPropensityContribution(g::Vector, Ncomp::Int64, I...)
+    return sum( _computeCompPropensityContribution.(Ref(g), Ncomp, I) )
+end
+function _computeCompPropensityContribution(g::Matrix, Ncomp::Int64, I...)
+    # Here we need to sum all the contributions of each compartment (i.e. upper col-row)
+    individualContributions = sum( _computeCompPropensityContribution.(Ref(g), Ncomp, I) )
+    # And then to sum all the crossings, where the same values are summed twice, once
+    # for each compartment: i.e. g[i,j] is summed both as contribution of 'i' and of 'j'
+    doubledContributions = sum( 
+                                broadcast( 
+                                    x->getindex(g, x...),
+                                    combinations(I, 2),
+                                    ) 
+                                )
+    return individualContributions - doubledContributions
+end
+
+"""
+    _swapCompartmentIndexInPropensityTensor!(g, Ncomp::Int64, i::Int64, j::Int64)
+
+Swap the compartment propensities from position i --> j in the propensity tensor.
+"""
+function _swapCompartmentIndexInPropensityTensor!(g::Nothing, NcompPre::Int64, i::Int64, j::Int64)
+    nothing
+end
+function _swapCompartmentIndexInPropensityTensor!(g::Vector, NcompPre::Int64, i::Int64, j::Int64)
+    g[j] = g[i]
+end
+function _swapCompartmentIndexInPropensityTensor!(g::Matrix, NcompPre::Int64, i::Int64, j::Int64)
+    if i == j
+        return
+    end
+    @assert i > j "ERROR: Only swaps from higher to lower indices are supported! ($i -> $j)"
+    g[1:j-1, j] .= g[1:j-1, i]
+    g[j, j+1:i-1] .= g[j+1:i-1, i]
+    g[j, i:NcompPre-1] .= g[i, i+1:NcompPre]
+end
+"""
+    _swapCompartmentIndexInPropensityTensor!(g, NcompPre::Int64, p::Pair{Int64, Int64})
+
+Swap the compartment propensities from position p.first --> p.second in the propensity tensor.
+"""
+function _swapCompartmentIndexInPropensityTensor!(
+                g::Union{Nothing, Vector, Matrix}, 
+                NcompPre::Int64, 
+                p::Pair{Int64, Int64},
+                )
+    _swapCompartmentIndexInPropensityTensor!(g, NcompPre, p.first, p.second)
+end
+
+# function _computeSwapLostContribution(g::Union{Nothing, Vector}, P::Pair{Int64, Int64}...)
+#     return 0
+# end
+# function _computeSwapLostContribution(g::Matrix)
+#     return 0 # No swap, nothing lost
+# end
+# function _computeSwapLostContribution(g::Matrix, p::Pair{Int64, Int64})
+#     if p.first == p.second
+#         return 0
+#     end
+#     @assert p.second < p.first "FATAL: This swap is ill-posed"
+#     return g[p.second, p.first]
+# end
+
+function _updatePropensityTensor!(
+                g::Nothing, 
+                n::Matrix{Int64}, 
+                Mom::Vector{Int64},
+                propensity::Function, 
+                Ncomp::Int64, 
+                i::Int64,
+                )
+    nothing
+end
+function _updatePropensityTensor!(
+                g::Vector, 
+                n::Matrix{Int64}, 
+                Mom::Vector{Int64},
+                propensity::Function, 
+                Ncomp::Int64, 
+                i::Int64,
+                )
+    xc = [ n[:,i] ]
+    g[i] = propensity(xc, Mom)
+end
+function _updatePropensityTensor!(
+                g::Matrix, 
+                n::Matrix{Int64}, 
+                Mom::Vector{Int64},
+                propensity::Function, 
+                Ncomp::Int64, 
+                i::Int64,
+                )
+    # NOTE: propensity MUST be symmetric
+    # check = [ propensity([ n[:,i], n[:,j] ], Mom) == propensity([ n[:,j], n[:,i] ], Mom) for j=1:Ncomp ]
+    # @assert all(check) "Propensity is not symmetric"
+
+    # propWrapper(j::Int64) = propensity([ n[:,i], n[:,j] ], Mom)
+    g[1:i-1, i] .= ( propensity([ n[:,j], n[:,i] ], Mom) for j=1:i-1 )
+    g[i, i+1:Ncomp] .= ( propensity([ n[:,i], n[:,j] ], Mom) for j=i+1:Ncomp )
 end
 
 function _getTotalPropensity(N::Number, n::Matrix{Int64}, interaction::Function)
@@ -428,12 +835,12 @@ function _checkMomentsConsistency(Mom::Vector{Int64}, n::Matrix{Int64})
         FATAL: Moment inconsistency detected!
         M1: $M1
         M1e: $M1e
-    """
+        """
     @assert M2 == M2e """
         FATAL: Moment inconsistency detected!
         M2: $M2
         M2e: $M2e
-    """
+        """
 end
 
 #eof
