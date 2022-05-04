@@ -15,6 +15,126 @@ Lorenzo Duso
 Run `Nsamples` SSA trajectories with parameter `changes` (perturbations) at the
 given `durations` timepoints.
 """
+@export function SSA_perturbations(S::Vector{System}, 
+                                    n0::Matrix{Int64},
+                                    durations::Vector{Float64}, 
+                                    Nsamples::Int64; 
+                                    timestep::Float64=durations[1]/100, 
+                                    seed::Union{Nothing,Int64}=nothing,
+                                    exportRawOutput::Bool=false)
+    time_all,mm,t_setpoint,val_setpoint = SSA_perturbations(deepcopy(S),
+                                                                n0, durations,
+                                                                timestep=timestep,
+                                                                asserting=true)
+    # Prepare futures array and spawn the processes
+    F = []
+    for i=1:Nsamples
+        fut = @spawnat :any SSA_perturbations(deepcopy(S),
+                                                        n0, durations, 
+                                                        timestep=timestep,
+                                                        asserting=false)
+        push!(F, fut)
+    end
+    # Now prepare to collect the results
+    # MM=zeros(length(keys(S.MomDict)),length(time_all))
+    # MM2=zeros(size(MM))
+    # Take care of the raw output
+    n = nothing
+    if exportRawOutput
+        # The n layout is (Species, Cells)(Trajectories)
+        n = [ zeros(Int64, size(n0)) for i=1:Nsamples ]
+    end
+    #
+    function fetchMoments(i::Integer, n; verbose::Bool=false)
+        res = fetch(F[i])
+        if typeof(res)==RemoteException
+            throw(res)
+        end
+        tt, Mi, ts, vs, n_local = res
+        verbose && println("Fetch: SSA simulation # $i")
+        if !isnothing(n)
+            n[i] = deepcopy(n_local)
+        end
+        @assert all(Mi .>= 0)
+        return Mi
+        # MM .+= Mi
+        # MM2 .+= Mi.^2
+        # [Mi, Mi.^2] # This must be the last line of the loop block for the reduction to work!
+    end
+    function varm(itr, mean::Array)
+        # @assert length(itr) > 1 "Cannot compute variance on a single value!"
+        v = zeros(size(mean))
+        if length(itr)==1
+            return v
+        end
+        for x in itr
+            @. v += (x - mean)^2
+        end
+        v ./= length(itr)-1
+        return v
+    end
+    momentsGenerator = ( fetchMoments(i, n) for i=1:Nsamples )
+    MMav = mean(momentsGenerator)
+    # @time begin
+    begin
+        MMvar = varm(momentsGenerator, MMav)
+        momentsGenerator2 = ( fetchMoments(i, nothing; verbose=false).^2 for i=1:Nsamples )
+        MM2 = sum(momentsGenerator2)
+    end
+    # @assert all(MM .>= 0)
+    # @assert all(MM2 .>= 0)
+    # MMav = MM/Nsamples
+    # MMvar = ( MM2 - (MM.^2)/Nsamples ) / (Nsamples-1)
+    @assert all(MMav .>= 0) "Moments cannot be negative!"
+    @assert all(MMvar .>= 0) "Variances cannot be negative!"
+    return time_all, MMav, MMvar, t_setpoint, val_setpoint, n, MM2/(Nsamples)
+end
+
+"""
+    SSA_perturbations(S, n0, durations, changes;
+                             timestep=0.1, seed=nothing, asserting=true)
+
+Run one SSA trajectory with parameter `changes` (perturbations) at the given
+`durations` timepoints.
+"""
+@export function SSA_perturbations(S::Vector{System}, 
+                                    n0::Matrix{Int64}, 
+                                    durations::Vector{Float64};
+                                    timestep::Float64=durations[1]/100, 
+                                    seed::Union{Nothing,Int64}=nothing, 
+                                    asserting::Bool=true)
+    seed!=nothing ? Random.seed!(seed) : nothing
+    asserting ? assert_model(S[1],n0) : nothing
+    @assert length(durations)==length(S) "Invalid setpoint input"
+    LL=length(S)
+    n_start = deepcopy(n0)
+    n_out   = deepcopy(n0) # We want to be able to export the raw output (to compute PDFs)
+    t_start=0.
+    time_all=Vector{Float64}()
+    moments_all=zeros(Float64,length(compute_moments(S[1],n0)),0) # Avoid Int overflows
+    t_setpoint=Vector{Float64}()
+    val_setpoint=Vector{Float64}()
+    for i=1:LL
+        s = S[i]
+        timepoints=collect(t_start:timestep:t_start+durations[i])
+        push!(t_setpoint,t_start); 
+        push!(t_setpoint,timepoints[end]); 
+        n_out, mom_out = SSA(s, n_start, timepoints, full_story=false, asserting=false)
+        time_all = [time_all;timepoints]
+        moments_all = [moments_all mom_out]
+        t_start += durations[i]
+        n_start = deepcopy(n_out)
+    end
+    return time_all, moments_all, t_setpoint, val_setpoint, n_out
+end
+
+"""
+    SSA_perturbations(S, n0, durations, changes, Nsamples=100;
+                             timestep=0.1, seed=nothing)
+
+Run `Nsamples` SSA trajectories with parameter `changes` (perturbations) at the
+given `durations` timepoints.
+"""
 @export function SSA_perturbations(S::System, 
                                     n0::Matrix{Int64},
                                     durations::Vector{Float64}, 

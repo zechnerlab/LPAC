@@ -93,73 +93,150 @@ end
 	return pMoments
 end
 
-@export function plotMeanComparisons(Tssa, Mssa, Tclna, Mclna; 
+@export function plotMeanComparisons!(p, Tssa, Mssa, Tclna, Mclna; 
 					label=L"M", 
 					color=pal[1], 
 					legend=:bottomright,
 					ssaRibbon=nothing,
+					clnaRibbon=nothing,
+					clnaLabel::Bool=true,
+					plotFlags...
 					)
-	p = plotMoment(Tssa, Mssa; 
+	p = plotMoment!(p, Tssa, Mssa; 
 			color=color, 
-			label=L"\langle "*label*L"_{ssa} \rangle",
+			label=clnaLabel ? L"\langle "*label*L"_{ssa} \rangle" : label,
 			legend=legend,
 			σ=ssaRibbon,
+			plotFlags...
 			)
 	p = plotMoment!(p, Tclna, Mclna; 
 			color=color, 
 			linestyle=:dash,
 			linewidth=2.0, 
-			label=L"\langle "*label*L"_{approx} \rangle",
+			label=clnaLabel ? L"\langle "*label*L"_{pred} \rangle" : false,
 			legend=legend,
+			plotFlags...
 			)
+	if !isnothing(clnaRibbon)
+		#plot ribbon extrema as dotted lines
+		p = plot!(p, Tclna, Mclna .- clnaRibbon;
+					color=color,
+					linestyle=:dot,
+					linewidth=2.0, 
+					label=clnaLabel ? L"\sigma("*label*L")_{pred}" : false,
+					plotFlags...)
+		p = plot!(p, Tclna, Mclna .+ clnaRibbon;
+					color=color,
+					linestyle=:dot,
+					linewidth=2.0, 
+					label=false,
+					plotFlags...)
+	end
+	return p
 end
+@export function plotMeanComparisons(Tssa, Mssa, Tclna, Mclna; 
+					label=L"M", 
+					color=pal[1], 
+					legend=:bottomright,
+					ssaRibbon=nothing,
+					clnaRibbon=nothing,
+					clnaLabel::Bool=true,
+					plotFlags...
+					)
+	p = plot()
+	plotMeanComparisons!(p, Tssa, Mssa, Tclna, Mclna;
+			label=label, color=color, legend=legend, 
+			ssaRibbon=ssaRibbon, clnaRibbon=clnaRibbon, clnaLabel=clnaLabel, plotFlags...)
+end
+
 @export function plotVarianceComparisons(Tssa, VarSsa, Tclna, VarClna; 
 					label=L"Var", 
 					color=pal[1], 
 					legend=:bottomright,
 					# legend=:topright,
 					ssaRibbon=nothing,
+					plotFlags...
 					)
 	p = plotMoment(Tssa, VarSsa; 
 			color=color, 
 			label=L"Var("*label*L"_{ssa})",
 			legend=legend,
 			σ=ssaRibbon,
+			plotFlags...
 			)
 	p = plotMoment!(p, Tclna, VarClna; 
 			color=color, 
 			linestyle=:dash,
 			linewidth=2.0, 
-			label=L"Var("*label*L"_{approx})",
+			label=L"Var("*label*L"_{pred})",
 			legend=legend,
+			plotFlags...
+			)
+end
+@export function plotVarianceComparisons!(p, Tssa, VarSsa, Tclna, VarClna; 
+					label=L"Var", 
+					color=pal[1], 
+					legend=:bottomright,
+					# legend=:topright,
+					ssaRibbon=nothing,
+					plotFlags...
+					)
+	p2 = twinx(p)
+	plotMoment!(p2, Tssa, VarSsa; 
+			color=color, 
+			label=L"Var("*label*L"_{ssa})",
+			legend=legend,
+			σ=ssaRibbon,
+			linestyle=:dot,
+			fillstyle=:|,
+			plotFlags...
+			)
+	plotMoment!(p2, Tclna, VarClna; 
+			color=color, 
+			linestyle=:dash,
+			linewidth=2.0, 
+			label=L"Var("*label*L"_{pred})",
+			legend=legend,
+			plotFlags...
 			)
 end
 
-_var(M2::Number, M1::Number, N::Number) = M2 - ( M1^2 / N)
-_var(sol::Solution, M2::Symbol, M1::Symbol, N::Symbol=:N) = @. sol.M[M2] - ( (sol.M[M1])^2 / sol.M[N] )
+_cov(M11::Number, M10::Number, M01::Number, N::Number) = M11 - (M10*M01 / N)
+_cov(sol::Solution, M11::Symbol, M10::Symbol, M01::Symbol, N::Symbol=:N) = @. sol.M[M11] - (sol.M[M10]*sol.M[M01] / sol.M[N])
+_var(M2::Number, M1::Number, N::Number) = _cov(M2, M1, M1, N)
+_var(sol::Solution, M2::Symbol, M1::Symbol, N::Symbol=:N) = _cov(sol, M2, M1, M1, N)
+_std(M2::Number, M1::Number, N::Number) = sqrt( _cov(M2, M1, M1, N) )
+_std(sol::Solution, M2::Symbol, M1::Symbol, N::Symbol=:N) = sqrt.( abs.( _cov(sol, M2, M1, M1, N) ) )
 
 function correlation(N::Number, M11::Number, M10::Number, M01::Number, M20::Number, M02::Number)
-	num = M11 - (M10 * M01 / N)
-	denom = sqrt( _var(M20, M10, N) * _var(M02, M01, N) )
-	# denom = sqrt( abs( _var(M20, M10, N) * _var(M02, M01, N) ) ) #debug
-	return num ./ denom
+	# num = M11 - (M10 * M01 / N)
+	# denom = sqrt( _var(M20, M10, N) * _var(M02, M01, N) )
+	# # denom = sqrt( abs( _var(M20, M10, N) * _var(M02, M01, N) ) ) #debug
+	num = _cov(M11, M10, M01, N)
+	denom = _std(M20, M10, N) * _std(M02, M01, N)
+	return num / denom
 end
-function correlation(sol::Solution, M11::Symbol, M10::Symbol, M01::Symbol, M20::Symbol, M02::Symbol) 
-	num = sol.M[M11] .- (sol.M[M10] .* sol.M[M01] ./ sol.M[:N]) 
-	# num = sol.M[M11] .- (sol.M[M10] .* sol.M[M01]) 
-	denom = sqrt.( _var(sol, M20, M10) .* _var(sol, M02, M01) )
-	# denom = sqrt.( abs.( _var(sol, M20, M10) .* _var(sol, M02, M01) ) ) #debug
-	# denom = 1 # Un-rescaled
+function correlation(sol::Solution, M11::Symbol, M10::Symbol, M01::Symbol, M20::Symbol, M02::Symbol, N::Symbol=:N) 
+	# num = sol.M[M11] .- (sol.M[M10] .* sol.M[M01] ./ sol.M[:N]) 
+	# # num = sol.M[M11] .- (sol.M[M10] .* sol.M[M01]) 
+	# denom = sqrt.( _var(sol, M20, M10) .* _var(sol, M02, M01) )
+	# # denom = sqrt.( abs.( _var(sol, M20, M10) .* _var(sol, M02, M01) ) ) #debug
+	num = _cov(sol, M11, M10, M01, N)
+	denom = _std(sol, M20, M10, N) .* _std(sol, M02, M01, N)
 	return num ./ denom
 end
 @export function plotCorrelation(ssa::Solution, clna::Solution; 
 									M11::Symbol=:M¹¹, M10::Symbol=:M¹⁰, M01::Symbol=:M⁰¹,
 									M20::Symbol=:M²⁰, M02::Symbol=:M⁰²,
 									color=pal[1],
+									title=nothing,
 									# legend=:bottomright,
 									legend=:topright,
 									# legend=false,
 									ssaSD::Union{StandardDeviation,Nothing}=nothing,
+									xlabel="Time [a.u.]",
+									ylabel=nothing,
+									plotFlags...
 									)
 	l1 = replace(string(M10), "M"=>"x")
 	l2 = replace(string(M01), "M"=>"x")
@@ -172,19 +249,22 @@ end
 	p = plotMoment(ssa.T, ssaCorrelation;
 			ribbon=ssaCorrelationRibbon,
 			color=color,
-			label=latexstring("Corr("*l1*","*l2*")_{ssa}"),
+			label=latexstring("\\rho("*l1*","*l2*")_{ssa}"),
 			ylims=(-1.0,1.0),
 			# ylims=(-Inf,Inf),
 			legend=legend,
+			title=title,
+			plotFlags...
 			)
 	p = plotMoment!(p, clna.T, correlation(clna, M11, M10, M01, M20, M02);
 			color=color,
 			linestyle=:dash,
 			linewidth=2.0, 
-			label=latexstring("Corr("*l1*","*l2*")_{approx}"),
+			label=latexstring("\\rho("*l1*","*l2*")_{pred}"),
 			ylims=(-1.0,1.0),
 			# ylims=(-Inf,Inf),
 			legend=legend,
+			plotFlags...
 			)
 end
 
@@ -292,15 +372,12 @@ function convertSolution(sol::SciMLBase.AbstractODESolution,
 	return convertSolution(sol, MMap, σMap, T)
 end
 
-@export function cLNAsolve(M::Model;
+@export function cLNAsolve(M::Model, u0::Vector{T} where T <: Number;
 							T=10.0,
-							N0=1., Mpc0=1.,
-							# Mpc0bScale=1.,
 						 	MMap::Dict{Symbol,Int}=Dict{Symbol,Int}(), 
 							σMap::Dict{Symbol,Tuple{Symbol,Symbol}}=Dict{Symbol,Tuple{Symbol,Symbol}}(),
 							solverFlags...
 							)::SciMLBase.AbstractODESolution
-	u0 = M.momentsInit(N0, Mpc0)
 	u0Map = [ s=>u0[i] for (s,i) in M.momentsMapping ] #debug
 	# @show u0Map #debug
 	tspan = (0.0, T)
@@ -321,6 +398,18 @@ end
 				)
 	return sol
 end
+@export function cLNAsolve(M::Model;
+							T=10.0,
+							N0=1., Mpc0=1.,
+							# Mpc0bScale=1.,
+						 	MMap::Dict{Symbol,Int}=Dict{Symbol,Int}(), 
+							σMap::Dict{Symbol,Tuple{Symbol,Symbol}}=Dict{Symbol,Tuple{Symbol,Symbol}}(),
+							solverFlags...
+							)::SciMLBase.AbstractODESolution
+	u0 = M.momentsInit(N0, Mpc0)
+	cLNAsolve(M, u0;
+				T=T, MMap=MMap, σMap=σMap, solverFlags...)
+end
 
 # @export function plotSsaSolution(S::SSAsolution)
 # 	pMoments = plotMoments(S.T, S.N, S.M, S.σN, S.σM)
@@ -331,7 +420,6 @@ end
 @export function SSA_solve(M::Model; T::Number, 
 								N0::Number, Mpc0::Number,
 								NSSA::Number=100,
-								fillalpha::AbstractFloat=0.4,
 								)::Tuple{Solution, Vector}
 	S = M.ssaSystem
 	nSpecies = S.n_species
@@ -370,6 +458,45 @@ end
 	
 	return ssaSol, n
 end
+@export function SSA_solve(M::Vector{Model}; T::Number, 
+								N0::Number, Mpc0::Number,
+								NSSA::Number=100,
+								)::Tuple{Solution, Vector}
+	S = [ m.ssaSystem for m in M ]
+	nSpecies = S[1].n_species
+	n0 = zeros(Int64, nSpecies, N0) # Rows=species, Cols=cells
+	# Get the initial values from the initConditions and set it for the SSA
+	Mom0 = M[1].momentsInit(N0, Mpc0)
+	MomMap = M[1].momentsMapping
+	for i=1:nSpecies
+		s = :M*("⁰"^(i-1))*"¹"*("⁰"^(nSpecies-i))
+		n0[i,:] .= round(Int, Mom0[MomMap[s]] / N0) # Set the init value of each cell to the avg
+	end
+
+	# @show n0 #debug
+
+	durations = [float(T) for m in M]
+	# tTraj, momTraj, _, _, _ = Sim.SSA_perturbations(deepcopy(S), n0, durations, changes)
+	@time t, Moms, Vars, _, _, n, MM2 = Sim.SSA_perturbations(
+		S,
+		n0,
+		durations,
+		NSSA;
+		exportRawOutput=true,
+		)
+
+	Moments = MomentDict([ s=>Moms[i,:] for (i,s) in S[1].MomMapping ]...)
+	Sigmas = SigmaDict([ s=>sqrt.(Vars[i,:]) for (i,s) in S[1].MomMapping ]...)
+	Squares = MomentDict([ s=>MM2[i,:] for (i,s) in S[1].MomMapping ]...)
+	Sigmas[:X0] = nothing
+	ssaSol = Solution(
+				t,
+				Moments,
+				Sigmas,
+				)
+	
+	return ssaSol, n
+end
 
 @export function getErrorMeasure(ssaSol::Solution, clnaSol::SciMLBase.AbstractODESolution,
 									MMap::Dict{Symbol,Int}, 
@@ -397,7 +524,8 @@ end
 		plotMeanComparisons(ssa.T, ssa.M[s], clna.T, clna.M[s]; 
 							label=latexstring(s), 
 							color=pal[i], 
-							legend= s==:N ? :bottomright : legend,
+							# legend= s==:N ? :bottomright : legend,
+							legend= s==:N ? false : legend,
 							ssaRibbon=isnothing(ssaSD) ? nothing : ssaSD.M[s],
 							)
 		for (i,s) in enumerate(sanitizedSymbols)
@@ -414,7 +542,7 @@ end
 		plotVarianceComparisons(ssa.T, ssa.σ[s].^2, clna.T, clna.σ[s].^2; 
 							label=latexstring(s), color=pal[i],
 							legend= s==:N ? :bottomright : legend,
-							ssaRibbon=isnothing(ssaSD) ? nothing : ssaSD.σ[s],
+							ssaRibbon=isnothing(ssaSD) ? nothing : ssaSD.σ[s], # This is ok like this (no squaring necessary)
 							)
 		for (i,s) in enumerate(sanitizedSymbols)
 		]
@@ -429,6 +557,26 @@ end
 	plot(plots...; layout=(1,length(plots)) )
 end
 
+@export function plot2dPopulationHistogram(ssaPool; 
+											s1=1, s2=2, 
+											s1Label="Species $s1", s2Label="Species $s2",
+											aspect_ratio=0.8,
+											plotFlags...
+											)
+	@assert !isnothing(ssaPool)
+	species = size(ssaPool, 1)
+	@assert species>=2
+	h2 = histogram2d(ssaPool[s1,:], ssaPool[s2,:]; 
+						xlabel=s1Label,
+						ylabel=s2Label,
+						# xscale=:log10, yscale=:log10, # Uncomment this for log scale
+						aspect_ratio=aspect_ratio,
+						xlims=(0,Inf), ylims=(0,Inf),
+						plotFlags...
+						)
+	return h2
+end
+
 function _plotPopulationHistograms(ssaPool)
 	pHistograms = nothing
 	if !isnothing(ssaPool)
@@ -440,10 +588,7 @@ function _plotPopulationHistograms(ssaPool)
 		end
 		pHistograms = nothing
 		if species>=2
-			h2 = histogram2d(ssaPool[1,:], ssaPool[species,:]; 
-						xlabel="Species 1",
-						ylabel="Species $species",
-						)
+			h2 = plot2dPopulationHistogram(ssaPool; s1=1, s2=species)
 			pHistograms = plot(h2, histograms...; layout=(1,species+1))
 		else
 			pHistograms = plot(histograms...; layout=(1,species))
@@ -470,8 +615,10 @@ function _moment(S::Matrix, e::Vector)
 	return sum(M)
 end
 
-function _plotMomentsHistograms(M::Model, ssaTrajectories, symbols::Symbol...;
-									reference=nothing)
+@export function plotMomentsHistograms(M::Model, ssaTrajectories, symbols::Symbol...;
+									reference=nothing,
+									color=nothing,
+									plotFlags...)
 	pHistograms = nothing
 	if !isnothing(ssaTrajectories)
 		histograms=[]
@@ -482,7 +629,7 @@ function _plotMomentsHistograms(M::Model, ssaTrajectories, symbols::Symbol...;
 			curMom = [ _moment(S, e) for S in ssaTrajectories ]
 			Moments[s] = curMom
 
-			h = histogram(Moments[s]; title=string(s), color=pal[i], legend=false)
+			h = histogram(Moments[s]; title=string(s), color=isnothing(color) ? pal[i] : color, legend=false)
 			if !isnothing(reference)
 				ref = reference.M[s][end] # Pick last timepoint
 				h = vline!([ref]; color=:black, linewidth=3, legend=false)
@@ -500,7 +647,7 @@ function _plotMomentsHistograms(M::Model, ssaTrajectories, symbols::Symbol...;
 		# else
 		# 	pHistograms = plot(histograms...; layout=(1,length(histograms)))
 		# end
-		pHistograms = plot(histograms...; layout=(1,length(histograms)))
+		pHistograms = plot(histograms...; layout=(1,length(histograms)), plotFlags...)
 	end
 	return pHistograms
 end
@@ -527,6 +674,7 @@ end
 	end
 	scalefontsizes(fontscale)
 	p = nothing
+	pHistograms = nothing
 	try
 		pCLNA = plotSolution(sol; Ms=Msymb)
 		pSSA = plotSolution(reference; Ms=Msymb)
@@ -536,7 +684,7 @@ end
 							legend=varlegend, ssaSD=ssaSD)
 
 		pHistograms = _plotPopulationHistograms(ssaPool)
-		pMHistograms = _plotMomentsHistograms(M, ssaTrajectories, symbols...; reference=sol)
+		pMHistograms = plotMomentsHistograms(M, ssaTrajectories, symbols...; reference=sol)
 
 		if !verbose
 			p = plot(pMean, pVar; layout=(2,1), size=(800,400))
@@ -594,6 +742,30 @@ function _computeSSAStats(
 	return Solution(T, M, σ), StandardDeviation(T, Msd, σsd)
 end
 
+@export function runSSASimulations(M::Union{Model, Vector{Model}}, symbols::Symbol...; 
+						T=100.0, NSSA=100, RSSA=10,
+						N0=10, Mpc0=10,
+						clnaSol=nothing,
+						)
+	ssaSols = Vector{Solution}()
+	cells = []
+	trajectories = []
+	for ir=1:RSSA
+		ssaSol, nRaw = SSA_solve(M; T=T, N0=N0, Mpc0=Mpc0, NSSA=NSSA)
+		push!(ssaSols, ssaSol)
+		# if !isnothing(clnaSol)
+		# 	Err = getErrorMeasure(ssaSol, 
+		# 				clnaSol, M.momentsMapping, M.sigmaMapping,
+		# 				symbols...)
+		# 	@show Err
+		# end
+		push!(cells, hcat(nRaw...))
+		push!(trajectories, nRaw...)
+	end
+	nPool = hcat(cells...)
+	ssaMeanSol, ssaSDSol = _computeSSAStats(ssaSols)
+	return nPool, trajectories, ssaMeanSol, ssaSDSol
+end
 
 @export function testAll(M::Model, symbols::Symbol...; 
 						T=100.0, NSSA=100, RSSA=10,
@@ -636,22 +808,10 @@ end
 								fontscale=fontscale,
 								)
 	else
-		ssaSols = Vector{Solution}()
-		cells = []
-		trajectories = []
-		for ir=1:RSSA
-			ssaSol, nRaw = SSA_solve(M; T=T, N0=N0, Mpc0=Mpc0, NSSA=NSSA)
-			push!(ssaSols, ssaSol)
-			Err = getErrorMeasure(ssaSol, 
-						clnaSol, M.momentsMapping, M.sigmaMapping,
-						symbols...)
-			@show Err
-			push!(cells, hcat(nRaw...))
-			push!(trajectories, nRaw...)
-		end
-		nPool = hcat(cells...)
+		nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
+				M, symbols...;
+				T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, clnaSol=clnaSol)
 		clnaSol = convertSolution(clnaSol, M.momentsMapping, M.sigmaMapping)
-		ssaMeanSol, ssaSDSol = _computeSSAStats(ssaSols)
 		return compareSolutions(M, clnaSol, ssaMeanSol, symbols...;
 								Msymb = Msymb,
 								rescaleToConcentrations=rescaleToConcentrations,

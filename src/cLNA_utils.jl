@@ -84,4 +84,33 @@ function rescaleSolution!(sol::Solution, Ω, Ωc)
 	return sol
 end
 
+@export function solcat(S::Solution...)
+	Tcat = deepcopy(S[1].T)
+	Mcat = deepcopy(S[1].M)
+	σcat = deepcopy(S[1].σ)
+	
+	for s in S[2:end]
+		T, M, σ = s.T, s.M, s.σ
+		skip = 0
+		if T[1] < Tcat[end]	# If time of current solution started from zero
+			T .+= Tcat[end] # then offset it by the end time of the previous one
+		end
+		if T[1] == Tcat[end] # If the time of cur solution starts exactly at the end time of prev
+			skip = 1
+		end
+		Tcat = vcat(Tcat, T[skip:end])
+		for k in keys(Mcat)
+			@assert k in keys(M) "Moment $k not available in all solutions that are being concatenated!"
+			Mcat[k] = vcat(Mcat[k], M[k][skip:end])
+		end
+		for k in keys(σcat)
+			@assert k in keys(σ) "σ of moment $k not available in all solutions that are being concatenated!"
+			if !isnothing(σcat[k])
+				σcat[k] = vcat(σcat[k], σ[k][skip:end])
+			end
+		end
+	end
+	return Solution(Tcat, Mcat, σcat)
+end
+
 #eof
