@@ -2,7 +2,13 @@
 Plotter: some plotting-related functions.
 =#
 
-const pal = palette(:tab10)
+const pal = palette(:tab10) # Non color-blind/CVD friendly :(
+const pal_oi = palette(:okabe_ito) # Friendly :)
+const pal_tl = palette(:tol_light) # Friendly :)
+const pal_tb = palette(:tol_bright) # Friendly :)
+const pal_custom = palette( [ pal_tb[1], pal_tb[2], pal_tb[3], pal_oi[6], pal_oi[1] ] )
+const pal_custom2 = palette( [ pal_tb[1], pal_oi[3], pal_tb[3], pal_oi[6], pal_oi[1] ] )
+const pal_custom3 = palette( [ pal_tb[2], pal_oi[3], pal_tb[3], pal_oi[6], pal_oi[1] ] )
 
 function plotMoment(T, M; σ=nothing, legend=:topleft, ylims=(0.0,Inf), kwargs...)
 	p = plot(T, M; 
@@ -117,6 +123,9 @@ end
 			legend=legend,
 			plotFlags...
 			)
+	@show label
+	μerr = mean( norm1error(Tclna, Mclna, Tssa, Mssa; relative=true) )
+	@show μerr
 	if !isnothing(clnaRibbon)
 		#plot ribbon extrema as dotted lines
 		p = plot!(p, Tclna, Mclna .- clnaRibbon;
@@ -131,6 +140,8 @@ end
 					linewidth=2.0, 
 					label=false,
 					plotFlags...)
+		σerr = mean( norm1error(Tclna, clnaRibbon, Tssa, ssaRibbon; relative=true) )
+		@show σerr
 	end
 	return p
 end
@@ -206,7 +217,8 @@ _cov(sol::Solution, M11::Symbol, M10::Symbol, M01::Symbol, N::Symbol=:N) = @. so
 _var(M2::Number, M1::Number, N::Number) = _cov(M2, M1, M1, N)
 _var(sol::Solution, M2::Symbol, M1::Symbol, N::Symbol=:N) = _cov(sol, M2, M1, M1, N)
 _std(M2::Number, M1::Number, N::Number) = sqrt( _cov(M2, M1, M1, N) )
-_std(sol::Solution, M2::Symbol, M1::Symbol, N::Symbol=:N) = sqrt.( abs.( _cov(sol, M2, M1, M1, N) ) )
+# _std(sol::Solution, M2::Symbol, M1::Symbol, N::Symbol=:N) = sqrt.( _cov(sol, M2, M1, M1, N) )
+_std(sol::Solution, M2::Symbol, M1::Symbol, N::Symbol=:N) = sqrt.( abs.( _cov(sol, M2, M1, M1, N) ) ) #debug
 
 function correlation(N::Number, M11::Number, M10::Number, M01::Number, M20::Number, M02::Number)
 	# num = M11 - (M10 * M01 / N)
@@ -233,9 +245,10 @@ end
 									# legend=:bottomright,
 									legend=:topright,
 									# legend=false,
+									tightLegend::Bool=false,
 									ssaSD::Union{StandardDeviation,Nothing}=nothing,
-									xlabel="Time [a.u.]",
-									ylabel=nothing,
+									# xlabel="Time [a.u.]",
+									# ylabel=nothing,
 									plotFlags...
 									)
 	l1 = replace(string(M10), "M"=>"x")
@@ -244,28 +257,41 @@ end
 	ssaCorrelationRibbon = nothing
 	if :corr in keys(ssa.M)
 		ssaCorrelation = ssa.M[:corr]
-		ssaCorrelationRibbon = !isnothing(ssaSD) ? ssaSD.M[:corr] : nothing
+		# @show ssaSD.M[:corr]
+		# @show all(isnan.(ssaSD.M[:corr]))
+		ssaCorrelationRibbon = !( isnothing(ssaSD) || all(isnan.(ssaSD.M[:corr])) ) ? ssaSD.M[:corr] : nothing
 	end
+	clnaCorrelation = correlation(clna, M11, M10, M01, M20, M02)
+
+	# Sanitize correlations to replace any NaN with a 0.0
+	ssaCorrelation[ isnan.(ssaCorrelation) ] .= 0.0
+	clnaCorrelation[ isnan.(clnaCorrelation) ] .= 0.0
+
+	@show (M10,M01)
+	corrErr = mean( norm1error(clna.T, clnaCorrelation, ssa.T, ssaCorrelation; relative=false) )
+	@show corrErr
+
 	p = plotMoment(ssa.T, ssaCorrelation;
 			ribbon=ssaCorrelationRibbon,
 			color=color,
-			label=latexstring("\\rho("*l1*","*l2*")_{ssa}"),
+			label=tightLegend ? latexstring("\\rho_{ssa}") : latexstring("\\rho("*l1*","*l2*")_{ssa}"),
 			ylims=(-1.0,1.0),
 			# ylims=(-Inf,Inf),
 			legend=legend,
 			title=title,
 			plotFlags...
 			)
-	p = plotMoment!(p, clna.T, correlation(clna, M11, M10, M01, M20, M02);
+	p = plotMoment!(p, clna.T, clnaCorrelation;
 			color=color,
 			linestyle=:dash,
 			linewidth=2.0, 
-			label=latexstring("\\rho("*l1*","*l2*")_{pred}"),
+			label=tightLegend ? latexstring("\\rho_{pred}") : latexstring("\\rho("*l1*","*l2*")_{pred}"),
 			ylims=(-1.0,1.0),
 			# ylims=(-Inf,Inf),
 			legend=legend,
 			plotFlags...
 			)
+	return p
 end
 
 function computeCV(N, M, σN, σM)
@@ -458,7 +484,7 @@ end
 	
 	return ssaSol, n
 end
-@export function SSA_solve(M::Vector{Model}; T::Number, 
+@export function SSA_solve(M::Vector{Model}; T::Vector{numType} where numType<:Number, 
 								N0::Number, Mpc0::Number,
 								NSSA::Number=100,
 								)::Tuple{Solution, Vector}
@@ -475,7 +501,7 @@ end
 
 	# @show n0 #debug
 
-	durations = [float(T) for m in M]
+	durations = [float(t) for t in T]
 	# tTraj, momTraj, _, _, _ = Sim.SSA_perturbations(deepcopy(S), n0, durations, changes)
 	@time t, Moms, Vars, _, _, n, MM2 = Sim.SSA_perturbations(
 		S,
@@ -557,16 +583,77 @@ end
 	plot(plots...; layout=(1,length(plots)) )
 end
 
+_ep(clnaSol::Solution, M::Symbol) = clnaSol.M[M][end] / clnaSol.M[:N][end]
+
+@export function plot1dPopulationHistogram(ssaPool; 
+											s1=1, 
+											s1Label="Species $s1",											
+											# aspect_ratio=0.8,
+											clnaSol::Union{Solution,Nothing}=nothing, M=:M¹, 
+											# todo: replace the moments with a function that returns the right symbol based on species index
+											plotFlags...
+											)
+	p = plot()
+	plot1dPopulationHistogram!(p, ssaPool;
+		s1=s1, s1Label=s1Label, 
+		# aspect_ratio=aspect_ratio,
+		clnaSol=clnaSol, M=M, plotFlags...)
+end
+@export function plot1dPopulationHistogram!(p, ssaPool; 
+											s1=1, 
+											s1Label=latexstring("x_$s1"),
+											# aspect_ratio=0.8,
+											clnaSol::Union{Solution,Nothing}=nothing, M=:M¹,
+											# todo: replace the moments with a function that returns the right symbol based on species index
+											plotFlags...
+											)
+	@assert !isnothing(ssaPool)
+	species = size(ssaPool, 1)
+	@assert species>=s1 "Species with index $s1 does not exist!"
+	h2 = histogram!(p, ssaPool[s1,:]; 
+						xlabel=s1Label,
+						# aspect_ratio=aspect_ratio,
+						# xlims=(0,Inf), ylims=(0,Inf),
+						plotFlags...
+						)
+	if !isnothing(clnaSol)
+		# Place a vertical line where the Taylor expansion point is!
+		ep = _ep(clnaSol, M)
+		h2 = vline!(p, [ep,];
+				color=:black, 
+				linewidth=3, 
+				legend=false,
+				)
+				# plotFlags...)
+	end
+	return h2
+end
+
 @export function plot2dPopulationHistogram(ssaPool; 
 											s1=1, s2=2, 
 											s1Label="Species $s1", s2Label="Species $s2",
 											aspect_ratio=0.8,
+											clnaSol::Union{Solution,Nothing}=nothing, M10=:M¹⁰, M01=:M⁰¹, 
+											# todo: replace the moments with a function that returns the right symbol based on species index
+											plotFlags...
+											)
+	p = plot()
+	plot2dPopulationHistogram!(p, ssaPool;
+		s1=s1, s2=s2, s1Label=s1Label, s2Label=s2Label, aspect_ratio=aspect_ratio,
+		clnaSol=clnaSol, M10=M10, M01=M01, plotFlags...)
+end
+@export function plot2dPopulationHistogram!(p, ssaPool; 
+											s1=1, s2=2, 
+											s1Label=latexstring("x_$s1"), s2Label=latexstring("x_$s2"),
+											aspect_ratio=0.8,
+											clnaSol::Union{Solution,Nothing}=nothing, M10=:M¹⁰, M01=:M⁰¹, 
+											# todo: replace the moments with a function that returns the right symbol based on species index
 											plotFlags...
 											)
 	@assert !isnothing(ssaPool)
 	species = size(ssaPool, 1)
 	@assert species>=2
-	h2 = histogram2d(ssaPool[s1,:], ssaPool[s2,:]; 
+	histogram2d!(p, ssaPool[s1,:], ssaPool[s2,:]; 
 						xlabel=s1Label,
 						ylabel=s2Label,
 						# xscale=:log10, yscale=:log10, # Uncomment this for log scale
@@ -574,6 +661,18 @@ end
 						xlims=(0,Inf), ylims=(0,Inf),
 						plotFlags...
 						)
+	if !isnothing(clnaSol)
+		# Place a star where the Taylor expansion point is!
+		ep = ( _ep(clnaSol, M10), _ep(clnaSol, M01) )
+		h2 = scatter!(p, [ep,];
+				markersize=20, 
+				markerstrokewidth=1.5,
+				markerstrokecolor=:black, # Border color
+				markercolor=:white, 	  # Fill color
+				markershape=:star5, 
+				label=false,
+				)
+	end
 	return h2
 end
 
@@ -613,6 +712,49 @@ function _moment(S::Matrix, e::Vector)
 	P = _tpow(S,e)
 	M = prod(P, dims=2)
 	return sum(M)
+end
+
+@export function plotMomentsHistogram(M::Model, ssaTrajectories, symbol::Symbol;
+									reference=nothing,
+									color=nothing,
+									paletteIndex=1,
+									plotFlags...)
+	p = plot()
+	return plotMomentsHistogram!(p, M, ssaTrajectories, symbol;
+									reference=reference,
+									color=color,
+									paletteIndex=paletteIndex,
+									plotFlags...)
+end
+
+@export function plotMomentsHistogram!(p, M::Model, ssaTrajectories, symbol::Symbol;
+									reference=nothing,
+									color=nothing,
+									paletteIndex=1,
+									plotFlags...)
+	pHistogram = nothing
+	if !isnothing(ssaTrajectories)
+		species = size(ssaTrajectories[1],1)
+		e = M.ssaSystem.MomExpMapping[symbol]
+		curMom = [ _moment(S, e) for S in ssaTrajectories ]
+
+		h = histogram!(p, curMom; 
+				title=string(symbol), 
+				color=isnothing(color) ? pal[paletteIndex] : color, 
+				legend=false, 
+				plotFlags...)
+		if !isnothing(reference)
+			ref = reference.M[symbol][end] # Pick last timepoint
+			h = vline!(p, [ref]; 
+					color=:black, 
+					linewidth=3, 
+					legend=false,
+					)
+					# plotFlags...)
+		end
+		pHistogram = h
+	end
+	return pHistogram
 end
 
 @export function plotMomentsHistograms(M::Model, ssaTrajectories, symbols::Symbol...;
@@ -1004,6 +1146,70 @@ end
 				plot = true, normC = _norm)
 	scene = plot(br, plotfold=false, markersize=3, legend=:topleft)
 	return scene,br
+end
+
+@export function _getSetpointValues(T::AbstractVector, durations::AbstractVector, setpoints::AbstractVector)
+	@assert length(durations) == length(setpoints) "Number of durations and setpoints must be equal!"
+
+	upperbounds = cumsum(durations)
+	_getphase(t) = argmax(t .<= upperbounds)
+	Y = [ setpoints[_getphase(t)] for t in T ]
+	return Y
+end
+
+@export function _testPropensities(;
+		# s=1,
+		s=25,
+		λ0=1e1, λ1=λ0*1e-2, λ2=λ1,
+		β=1e-1, 
+		ω=5e-1,
+		# ω=2,
+		α1=10, α2=α1,
+		ζ=1e-6,
+		)
+	Xmax = 250
+	X=0:1e-1:Xmax
+	Y=X
+	kMR0=10
+
+	# dx(x,y) = λ0 / (1 + ℯ^(-β*(s-y+ω*(x-α1))) ) - λ1*x + ζ
+	# dy(x,y) = λ0 / (1 + ℯ^(-β*(s-x+ω*(y-α2))) ) - λ2*y + ζ
+	dx(x,y) = λ0*kMR0/(kMR0+y) - λ1*x
+	dy(x,y) = λ0*kMR0/(kMR0+x) - λ2*y
+	dtot(x,y) = sqrt( dx(x,y)^2 + dy(x,y)^2 )
+
+	px=contourf(X,Y, dx; fillcolor=:curl )
+	px=contour!(X,Y, dx;
+		levels=[0.0,], 
+		linewidth=2.5, 
+		linestyle=:dot, 
+		seriescolor=[:black,],
+		)
+
+	py=contourf(X,Y, dy; fillcolor=:curl )
+	py=contour!(X,Y, dy;
+		levels=[0.0,], 
+		linewidth=2.5, 
+		linestyle=:dot, 
+		seriescolor=[:black,],
+		)
+	
+	ptot=contourf(X,Y, dtot; fillcolor=:curl, clims=(0,Inf))
+	ptot=contour!(X,Y, dtot;
+		levels=[0.0,], 
+		linewidth=2.5, 
+		linestyle=:dot, 
+		seriescolor=[:white,],
+		)
+
+	X = 0:10:Xmax; Y=X
+	XX = [x for x in X for y in Y]
+	YY = [y for x in X for y in Y]
+	df(x,y) = normalize([dx(x,y), dy(x,y)]) .* 5
+	pq = quiver(XX, YY, quiver=df)
+	ptot = quiver!(ptot, XX, YY, quiver=df; color=:white)
+	
+	plot(px,py,ptot, pq)
 end
 
 #eof

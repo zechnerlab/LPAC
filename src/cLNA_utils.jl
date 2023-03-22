@@ -113,4 +113,28 @@ end
 	return Solution(Tcat, Mcat, σcat)
 end
 
+"""
+	norm1error(X,Y, Xref,Yref; 
+				relative::Bool=false)
+
+Compute the norm-1 error of the X,Y data series against the reference Xref,Yref.
+The data series is linearly interpolated at the reference points (Xref).
+"""
+@export function norm1error(X,Y, Xref,Yref; relative::Bool=false)
+	try
+		I = linear_interpolation(X,Y)
+		diff = I.(Xref) .- Yref
+		err = diff
+		if relative
+			err = diff ./ Yref
+			err[isnan.(err)] .= 0.0
+		end
+		return abs.( err )
+	catch e
+		println("Warning: Cannot compute the norm1error due to exception (probably ODE solution failed), returning NaN")
+		# @show e
+		return NaN
+	end
+end
+
 #eof

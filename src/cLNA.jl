@@ -6,9 +6,10 @@ using LaTeXStrings, Plots, Plots.PlotMeasures
 using Statistics
 using Distributions
 using Parameters: @unpack
-using LinearAlgebra: norm
+using LinearAlgebra: norm, normalize
 import Base: *, occursin # For overriding
 using BifurcationKit, Setfield
+using Interpolations: linear_interpolation
 
 export Sim, Symb, Models, Figures
 
@@ -53,6 +54,7 @@ module Figures
 	using ..cLNA # Use exported names from the parent cLNA module
 	using InlineExports
 	using LaTeXStrings, Measures, Plots
+	using Serialization
 
 	function __init__()
 		# Set the backend and canvas size
