@@ -20,31 +20,6 @@ rescaleMixed(MN, N, Ω, Ωc, p=1) = rescaleCompartments(
 												rescaleContent(MN, N, Ωc, p), 
 												Ω, p)
 
-# function rescaleClnaSol!(sol, Ω, Ωc)
-# 	N = @view sol[1, :]
-# 	N² = @view sol[2, :]
-# 	M = @view sol[3, :]
-# 	M² = @view sol[4, :]
-# 	NM = @view sol[5, :]
-
-# 	M .= rescaleContent(M, N, Ωc)
-# 	M² .= rescaleContent(M², N, Ωc, 2)
-# 	NM .= rescaleMixed(NM, N, Ω, Ωc)
-# 	N² .= rescaleCompartments(N², Ω, 2)
-# 	N .= rescaleCompartments(N, Ω)
-
-# 	return sol
-# end
-
-# function rescaleSsaSol!(sol, Ω, Ωc)
-# 	sol.M .= rescaleContent(sol.M, sol.N, Ωc)
-# 	sol.σM .= rescaleContent(sol.σM, sol.N, Ωc)
-# 	sol.σN .= rescaleCompartments(sol.σN, Ω)
-# 	sol.N .= rescaleCompartments(sol.N, Ω)
-
-# 	return sol
-# end
-
 function rescaleSolution!(sol::Solution, Ω, Ωc)
 	N = sol.M[:N]
 	SymbolsM = keys(sol.M)
@@ -84,7 +59,13 @@ function rescaleSolution!(sol::Solution, Ω, Ωc)
 	return sol
 end
 
-@export function solcat(S::Solution...)
+"""
+	solcat(S::Solution...)::Solution
+
+Concatenates Solution objects over the time dimension.
+Useful for stitching together partial consecutive solutions obtained with different parameters.
+"""
+@export function solcat(S::Solution...)::Solution
 	Tcat = deepcopy(S[1].T)
 	Mcat = deepcopy(S[1].M)
 	σcat = deepcopy(S[1].σ)
@@ -135,6 +116,20 @@ The data series is linearly interpolated at the reference points (Xref).
 		# @show e
 		return NaN
 	end
+end
+
+"""
+	_getSetpointValues(T, durations, setpoints)
+
+Internal function used for the SAIC figure.
+"""
+@export function _getSetpointValues(T::AbstractVector, durations::AbstractVector, setpoints::AbstractVector)
+	@assert length(durations) == length(setpoints) "Number of durations and setpoints must be equal!"
+
+	upperbounds = cumsum(durations)
+	_getphase(t) = argmax(t .<= upperbounds)
+	Y = [ setpoints[_getphase(t)] for t in T ]
+	return Y
 end
 
 #eof

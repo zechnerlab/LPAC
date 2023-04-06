@@ -8,7 +8,6 @@ using Distributions
 using Parameters: @unpack
 using LinearAlgebra: norm, normalize
 import Base: *, occursin # For overriding
-using BifurcationKit, Setfield
 using Interpolations: linear_interpolation
 
 export Sim, Symb, Models, Figures
@@ -37,7 +36,16 @@ end
 
 include("cLNA_structs.jl")
 include("cLNA_utils.jl")
+include("cLNA_solvers.jl")
 include("cLNA_plotter.jl")
+
+module Experimental
+	using ..cLNA
+	using InlineExports
+	using Distributions
+
+	include("cLNA_experimental.jl")
+end
 
 module Models
 	using ..cLNA

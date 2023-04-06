@@ -14,13 +14,6 @@ cLNA Figures: code for defining the figures for the paper.
 	M = Models.IEqCFBDq_new(; kC=0,kF=0)
 	solverFlags = []
 	symbols = [:N, :M¹]
-	# testAll(M, :N, :M¹; 
-	# 			NSSA=NSSA, RSSA=RSSA, 
-	# 			T=T, N0=N0, Mpc0=Mpc0, 
-	# 			rescaleToConcentrations=false, 
-	# 			meanlegend=:bottomright, varlegend=:bottomright, 
-	# 			reltol=1e-3, 
-	# 			verbose=false)
 	
 	# Save the solutions data and allow for reloading them.
 	dumpFName="$(savepath)/$(name).jser"
