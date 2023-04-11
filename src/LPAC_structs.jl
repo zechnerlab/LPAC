@@ -1,4 +1,4 @@
-# Structures and types to be used with cLNA
+# Structures and types to be used with LPAC
 
 @export struct Model
     parameters::Union{Tuple, Dict{Symbol, T}} where T

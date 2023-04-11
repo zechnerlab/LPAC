@@ -1,5 +1,5 @@
 #=
-Models to be used with the cLNA code, comparing cLNA vs. SSA
+Models to be used with the LPAC code, comparing LPAC vs. SSA
 =#
 
 SystemState = Matrix{Int64}

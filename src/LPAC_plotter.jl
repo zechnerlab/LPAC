@@ -99,68 +99,68 @@ end
 	return pMoments
 end
 
-@export function plotMeanComparisons!(p, Tssa, Mssa, Tclna, Mclna; 
+@export function plotMeanComparisons!(p, Tssa, Mssa, Tlpac, Mlpac; 
 					label=L"M", 
 					color=pal[1], 
 					legend=:bottomright,
 					ssaRibbon=nothing,
-					clnaRibbon=nothing,
-					clnaLabel::Bool=true,
+					lpacRibbon=nothing,
+					lpacLabel::Bool=true,
 					plotFlags...
 					)
 	p = plotMoment!(p, Tssa, Mssa; 
 			color=color, 
-			label=clnaLabel ? L"\langle "*label*L"_{ssa} \rangle" : label,
+			label=lpacLabel ? L"\langle "*label*L"_{ssa} \rangle" : label,
 			legend=legend,
 			σ=ssaRibbon,
 			plotFlags...
 			)
-	p = plotMoment!(p, Tclna, Mclna; 
+	p = plotMoment!(p, Tlpac, Mlpac; 
 			color=color, 
 			linestyle=:dash,
 			linewidth=2.0, 
-			label=clnaLabel ? L"\langle "*label*L"_{pred} \rangle" : false,
+			label=lpacLabel ? L"\langle "*label*L"_{pred} \rangle" : false,
 			legend=legend,
 			plotFlags...
 			)
 	@show label
-	μerr = mean( norm1error(Tclna, Mclna, Tssa, Mssa; relative=true) )
+	μerr = mean( norm1error(Tlpac, Mlpac, Tssa, Mssa; relative=true) )
 	@show μerr
-	if !isnothing(clnaRibbon)
+	if !isnothing(lpacRibbon)
 		#plot ribbon extrema as dotted lines
-		p = plot!(p, Tclna, Mclna .- clnaRibbon;
+		p = plot!(p, Tlpac, Mlpac .- lpacRibbon;
 					color=color,
 					linestyle=:dot,
 					linewidth=2.0, 
-					label=clnaLabel ? L"\sigma("*label*L")_{pred}" : false,
+					label=lpacLabel ? L"\sigma("*label*L")_{pred}" : false,
 					plotFlags...)
-		p = plot!(p, Tclna, Mclna .+ clnaRibbon;
+		p = plot!(p, Tlpac, Mlpac .+ lpacRibbon;
 					color=color,
 					linestyle=:dot,
 					linewidth=2.0, 
 					label=false,
 					plotFlags...)
-		σerr = mean( norm1error(Tclna, clnaRibbon, Tssa, ssaRibbon; relative=true) )
+		σerr = mean( norm1error(Tlpac, lpacRibbon, Tssa, ssaRibbon; relative=true) )
 		@show σerr
 	end
 	return p
 end
-@export function plotMeanComparisons(Tssa, Mssa, Tclna, Mclna; 
+@export function plotMeanComparisons(Tssa, Mssa, Tlpac, Mlpac; 
 					label=L"M", 
 					color=pal[1], 
 					legend=:bottomright,
 					ssaRibbon=nothing,
-					clnaRibbon=nothing,
-					clnaLabel::Bool=true,
+					lpacRibbon=nothing,
+					lpacLabel::Bool=true,
 					plotFlags...
 					)
 	p = plot()
-	plotMeanComparisons!(p, Tssa, Mssa, Tclna, Mclna;
+	plotMeanComparisons!(p, Tssa, Mssa, Tlpac, Mlpac;
 			label=label, color=color, legend=legend, 
-			ssaRibbon=ssaRibbon, clnaRibbon=clnaRibbon, clnaLabel=clnaLabel, plotFlags...)
+			ssaRibbon=ssaRibbon, lpacRibbon=lpacRibbon, lpacLabel=lpacLabel, plotFlags...)
 end
 
-@export function plotVarianceComparisons(Tssa, VarSsa, Tclna, VarClna; 
+@export function plotVarianceComparisons(Tssa, VarSsa, Tlpac, VarLpac; 
 					label=L"Var", 
 					color=pal[1], 
 					legend=:bottomright,
@@ -175,7 +175,7 @@ end
 			σ=ssaRibbon,
 			plotFlags...
 			)
-	p = plotMoment!(p, Tclna, VarClna; 
+	p = plotMoment!(p, Tlpac, VarLpac; 
 			color=color, 
 			linestyle=:dash,
 			linewidth=2.0, 
@@ -184,7 +184,7 @@ end
 			plotFlags...
 			)
 end
-@export function plotVarianceComparisons!(p, Tssa, VarSsa, Tclna, VarClna; 
+@export function plotVarianceComparisons!(p, Tssa, VarSsa, Tlpac, VarLpac; 
 					label=L"Var", 
 					color=pal[1], 
 					legend=:bottomright,
@@ -202,7 +202,7 @@ end
 			fillstyle=:|,
 			plotFlags...
 			)
-	plotMoment!(p2, Tclna, VarClna; 
+	plotMoment!(p2, Tlpac, VarLpac; 
 			color=color, 
 			linestyle=:dash,
 			linewidth=2.0, 
@@ -237,7 +237,7 @@ function correlation(sol::Solution, M11::Symbol, M10::Symbol, M01::Symbol, M20::
 	denom = _std(sol, M20, M10, N) .* _std(sol, M02, M01, N)
 	return num ./ denom
 end
-@export function plotCorrelation(ssa::Solution, clna::Solution; 
+@export function plotCorrelation(ssa::Solution, lpac::Solution; 
 									M11::Symbol=:M¹¹, M10::Symbol=:M¹⁰, M01::Symbol=:M⁰¹,
 									M20::Symbol=:M²⁰, M02::Symbol=:M⁰²,
 									color=pal[1],
@@ -261,14 +261,14 @@ end
 		# @show all(isnan.(ssaSD.M[:corr]))
 		ssaCorrelationRibbon = !( isnothing(ssaSD) || all(isnan.(ssaSD.M[:corr])) ) ? ssaSD.M[:corr] : nothing
 	end
-	clnaCorrelation = correlation(clna, M11, M10, M01, M20, M02)
+	lpacCorrelation = correlation(lpac, M11, M10, M01, M20, M02)
 
 	# Sanitize correlations to replace any NaN with a 0.0
 	ssaCorrelation[ isnan.(ssaCorrelation) ] .= 0.0
-	clnaCorrelation[ isnan.(clnaCorrelation) ] .= 0.0
+	lpacCorrelation[ isnan.(lpacCorrelation) ] .= 0.0
 
 	@show (M10,M01)
-	corrErr = mean( norm1error(clna.T, clnaCorrelation, ssa.T, ssaCorrelation; relative=false) )
+	corrErr = mean( norm1error(lpac.T, lpacCorrelation, ssa.T, ssaCorrelation; relative=false) )
 	@show corrErr
 
 	p = plotMoment(ssa.T, ssaCorrelation;
@@ -281,7 +281,7 @@ end
 			title=title,
 			plotFlags...
 			)
-	p = plotMoment!(p, clna.T, clnaCorrelation;
+	p = plotMoment!(p, lpac.T, lpacCorrelation;
 			color=color,
 			linestyle=:dash,
 			linewidth=2.0, 
@@ -342,30 +342,30 @@ function pushSigmaX0!(S::Solution, s2::Symbol, s1::Symbol)
 	pushSigmaX0!(S.σ, S.M, s2, s1)
 end
 
-@export function getErrorMeasure(ssaSol::Solution, clnaSol::SciMLBase.AbstractODESolution,
+@export function getErrorMeasure(ssaSol::Solution, lpacSol::SciMLBase.AbstractODESolution,
 									MMap::Dict{Symbol,Int}, 
 						 			σMap::Dict{Symbol,Tuple{Symbol,Symbol}},
 									symbols::Symbol...)
 	return getErrorMeasure(
 				ssaSol,
-				convertSolution(clnaSol, MMap, σMap, ssaSol.T),
+				convertSolution(lpacSol, MMap, σMap, ssaSol.T),
 				symbols...
 				)
 end
-@export function getErrorMeasure(ssa::Solution, clna::Solution,
+@export function getErrorMeasure(ssa::Solution, lpac::Solution,
 									symbols::Symbol...)
 	T = ssa.T
-	errors = [ abs.(clna.M[s] - ssa.M[s]) ./ ssa.M[s] for s in symbols ]
+	errors = [ abs.(lpac.M[s] - ssa.M[s]) ./ ssa.M[s] for s in symbols ]
 	return mean.(errors)
 end
 
-@export function plotMeans(ssa::Solution, clna::Solution, symbols::Symbol...; 
+@export function plotMeans(ssa::Solution, lpac::Solution, symbols::Symbol...; 
 							legend=:bottomright,
 							ssaSD::Union{StandardDeviation,Nothing}=nothing,
 							)
-	sanitizedSymbols = [ s for s in symbols if s in keys(clna.M) && s in keys(ssa.M) ]
+	sanitizedSymbols = [ s for s in symbols if s in keys(lpac.M) && s in keys(ssa.M) ]
 	plots = [ 
-		plotMeanComparisons(ssa.T, ssa.M[s], clna.T, clna.M[s]; 
+		plotMeanComparisons(ssa.T, ssa.M[s], lpac.T, lpac.M[s]; 
 							label=latexstring(s), 
 							color=pal[i], 
 							# legend= s==:N ? :bottomright : legend,
@@ -377,14 +377,14 @@ end
 	plot(plots...; layout=(1,length(plots)) )
 end
 
-@export function plotVariances(ssa::Solution, clna::Solution, symbols::Symbol...; 
+@export function plotVariances(ssa::Solution, lpac::Solution, symbols::Symbol...; 
 							# legend=:topright,
 							legend=:bottomright,
 							ssaSD::Union{StandardDeviation,Nothing}=nothing,
 							)
-	sanitizedSymbols = [ s for s in symbols if s in keys(clna.σ) && s in keys(ssa.σ) ]
+	sanitizedSymbols = [ s for s in symbols if s in keys(lpac.σ) && s in keys(ssa.σ) ]
 	plots = [ 
-		plotVarianceComparisons(ssa.T, ssa.σ[s].^2, clna.T, clna.σ[s].^2; 
+		plotVarianceComparisons(ssa.T, ssa.σ[s].^2, lpac.T, lpac.σ[s].^2; 
 							label=latexstring(s), color=pal[i],
 							legend= s==:N ? :bottomright : legend,
 							ssaRibbon=isnothing(ssaSD) ? nothing : ssaSD.σ[s], # This is ok like this (no squaring necessary)
@@ -393,7 +393,7 @@ end
 		]
 	if :M¹¹ in symbols
 		push!(plots, 
-			plotCorrelation(ssa, clna; M11=:M¹¹, M10=:M¹⁰, M01=:M⁰¹, 
+			plotCorrelation(ssa, lpac; M11=:M¹¹, M10=:M¹⁰, M01=:M⁰¹, 
 				color=pal[length(sanitizedSymbols)+1],
 				ssaSD=ssaSD,
 				),
@@ -402,13 +402,13 @@ end
 	plot(plots...; layout=(1,length(plots)) )
 end
 
-_ep(clnaSol::Solution, M::Symbol) = clnaSol.M[M][end] / clnaSol.M[:N][end]
+_ep(lpacSol::Solution, M::Symbol) = lpacSol.M[M][end] / lpacSol.M[:N][end]
 
 @export function plot1dPopulationHistogram(ssaPool; 
 											s1=1, 
 											s1Label="Species $s1",											
 											# aspect_ratio=0.8,
-											clnaSol::Union{Solution,Nothing}=nothing, M=:M¹, 
+											lpacSol::Union{Solution,Nothing}=nothing, M=:M¹, 
 											# todo: replace the moments with a function that returns the right symbol based on species index
 											plotFlags...
 											)
@@ -416,13 +416,13 @@ _ep(clnaSol::Solution, M::Symbol) = clnaSol.M[M][end] / clnaSol.M[:N][end]
 	plot1dPopulationHistogram!(p, ssaPool;
 		s1=s1, s1Label=s1Label, 
 		# aspect_ratio=aspect_ratio,
-		clnaSol=clnaSol, M=M, plotFlags...)
+		lpacSol=lpacSol, M=M, plotFlags...)
 end
 @export function plot1dPopulationHistogram!(p, ssaPool; 
 											s1=1, 
 											s1Label=latexstring("x_$s1"),
 											# aspect_ratio=0.8,
-											clnaSol::Union{Solution,Nothing}=nothing, M=:M¹,
+											lpacSol::Union{Solution,Nothing}=nothing, M=:M¹,
 											# todo: replace the moments with a function that returns the right symbol based on species index
 											plotFlags...
 											)
@@ -435,9 +435,9 @@ end
 						# xlims=(0,Inf), ylims=(0,Inf),
 						plotFlags...
 						)
-	if !isnothing(clnaSol)
+	if !isnothing(lpacSol)
 		# Place a vertical line where the Taylor expansion point is!
-		ep = _ep(clnaSol, M)
+		ep = _ep(lpacSol, M)
 		h2 = vline!(p, [ep,];
 				color=:black, 
 				linewidth=3, 
@@ -452,20 +452,20 @@ end
 											s1=1, s2=2, 
 											s1Label="Species $s1", s2Label="Species $s2",
 											aspect_ratio=0.8,
-											clnaSol::Union{Solution,Nothing}=nothing, M10=:M¹⁰, M01=:M⁰¹, 
+											lpacSol::Union{Solution,Nothing}=nothing, M10=:M¹⁰, M01=:M⁰¹, 
 											# todo: replace the moments with a function that returns the right symbol based on species index
 											plotFlags...
 											)
 	p = plot()
 	plot2dPopulationHistogram!(p, ssaPool;
 		s1=s1, s2=s2, s1Label=s1Label, s2Label=s2Label, aspect_ratio=aspect_ratio,
-		clnaSol=clnaSol, M10=M10, M01=M01, plotFlags...)
+		lpacSol=lpacSol, M10=M10, M01=M01, plotFlags...)
 end
 @export function plot2dPopulationHistogram!(p, ssaPool; 
 											s1=1, s2=2, 
 											s1Label=latexstring("x_$s1"), s2Label=latexstring("x_$s2"),
 											aspect_ratio=0.8,
-											clnaSol::Union{Solution,Nothing}=nothing, M10=:M¹⁰, M01=:M⁰¹, 
+											lpacSol::Union{Solution,Nothing}=nothing, M10=:M¹⁰, M01=:M⁰¹, 
 											# todo: replace the moments with a function that returns the right symbol based on species index
 											plotFlags...
 											)
@@ -480,9 +480,9 @@ end
 						xlims=(0,Inf), ylims=(0,Inf),
 						plotFlags...
 						)
-	if !isnothing(clnaSol)
+	if !isnothing(lpacSol)
 		# Place a star where the Taylor expansion point is!
-		ep = ( _ep(clnaSol, M10), _ep(clnaSol, M01) )
+		ep = ( _ep(lpacSol, M10), _ep(lpacSol, M01) )
 		h2 = scatter!(p, [ep,];
 				markersize=20, 
 				markerstrokewidth=1.5,
@@ -637,7 +637,7 @@ end
 	p = nothing
 	pHistograms = nothing
 	try
-		pCLNA = plotSolution(sol; Ms=Msymb)
+		pLPAC = plotSolution(sol; Ms=Msymb)
 		pSSA = plotSolution(reference; Ms=Msymb)
 		pMean = plotMeans(reference, sol, symbols...; 
 							legend=meanlegend, ssaSD=ssaSD)
@@ -655,9 +655,9 @@ end
 			end
 			# p = plot(pMean, pVar; layout=(2,1))
 		elseif sol !=  reference
-			p = plot(pSSA, pCLNA, pMean, pVar; layout=(4,1))
+			p = plot(pSSA, pLPAC, pMean, pVar; layout=(4,1))
 		else
-			p = plot(pCLNA, pMean, pVar; layout=(3,1))
+			p = plot(pLPAC, pMean, pVar; layout=(3,1))
 		end
 	finally
 		scalefontsizes(1/fontscale)
@@ -706,7 +706,7 @@ end
 @export function runSSASimulations(M::Union{Model, Vector{Model}}, symbols::Symbol...; 
 						T=100.0, NSSA=100, RSSA=10,
 						N0=10, Mpc0=10,
-						clnaSol=nothing,
+						lpacSol=nothing,
 						)
 	ssaSols = Vector{Solution}()
 	cells = []
@@ -714,9 +714,9 @@ end
 	for ir=1:RSSA
 		ssaSol, nRaw = SSA_solve(M; T=T, N0=N0, Mpc0=Mpc0, NSSA=NSSA)
 		push!(ssaSols, ssaSol)
-		if !isnothing(clnaSol)
+		if !isnothing(lpacSol)
 			Err = getErrorMeasure(ssaSol, 
-						clnaSol, M.momentsMapping, M.sigmaMapping,
+						lpacSol, M.momentsMapping, M.sigmaMapping,
 						symbols...)
 			@show Err
 		end

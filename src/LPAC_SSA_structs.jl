@@ -1,7 +1,7 @@
 #=
-Code from the sAIC project.
+Codebase from the sAIC project.
 Lorenzo Duso
-+ features for the cLNA project by Tommaso Bianucci
++ features for the LPAC project by Tommaso Bianucci
 =#
 
 # TRANSITION CLASS

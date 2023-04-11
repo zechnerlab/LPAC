@@ -1,5 +1,5 @@
 #=
-	Symbolic manipulations (quick&dirty) for deriving the cLNA
+	Symbolic manipulations (quick&dirty) for deriving the LPAC
 =#
 
 @export struct Reaction

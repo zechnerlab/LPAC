@@ -57,7 +57,7 @@ end
 	return any(u.<0)
 end
 
-@export function cLNAsolve(M::Model, u0::Vector{T} where T <: Number;
+@export function LPACsolve(M::Model, u0::Vector{T} where T <: Number;
 							T=10.0,
 						 	MMap::Dict{Symbol,Int}=Dict{Symbol,Int}(), 
 							σMap::Dict{Symbol,Tuple{Symbol,Symbol}}=Dict{Symbol,Tuple{Symbol,Symbol}}(),
@@ -78,7 +78,7 @@ end
 				)
 	return sol
 end
-@export function cLNAsolve(M::Model;
+@export function LPACsolve(M::Model;
 							T=10.0,
 							N0=1., Mpc0=1.,
 							# Mpc0bScale=1.,
@@ -87,7 +87,7 @@ end
 							solverFlags...
 							)::SciMLBase.AbstractODESolution
 	u0 = M.momentsInit(N0, Mpc0)
-	cLNAsolve(M, u0;
+	LPACsolve(M, u0;
 				T=T, MMap=MMap, σMap=σMap, solverFlags...)
 end
 

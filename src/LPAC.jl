@@ -1,4 +1,4 @@
-module cLNA
+module LPAC
 
 using InlineExports
 using DifferentialEquations
@@ -23,43 +23,43 @@ module Sim
 	using Statistics: mean, var
 	using UnicodePlots: spy
 
-	include("cLNA_SSA_structs.jl")
-	include("cLNA_SSA.jl")
+	include("LPAC_SSA_structs.jl")
+	include("LPAC_SSA.jl")
 end
 
 module Symb
 	using InlineExports
 	using Symbolics
 
-	include("cLNA_symb.jl")
+	include("LPAC_symb.jl")
 end
 
-include("cLNA_structs.jl")
-include("cLNA_utils.jl")
-include("cLNA_solvers.jl")
-include("cLNA_plotter.jl")
+include("LPAC_structs.jl")
+include("LPAC_utils.jl")
+include("LPAC_solvers.jl")
+include("LPAC_plotter.jl")
 
 module Experimental
-	using ..cLNA
+	using ..LPAC
 	using InlineExports
 	using Distributions
 
-	include("cLNA_experimental.jl")
+	include("LPAC_experimental.jl")
 end
 
 module Models
-	using ..cLNA
+	using ..LPAC
 	using InlineExports
 	using Distributions
 	using Parameters: @unpack
 
-	include("cLNA_models.jl")
+	include("LPAC_models.jl")
 	# Additional models to test correlations
-	include("cLNA_models_correlations.jl")
+	include("LPAC_models_correlations.jl")
 end
 
 module Figures
-	using ..cLNA # Use exported names from the parent cLNA module
+	using ..LPAC # Use exported names from the parent LPAC module
 	using InlineExports
 	using LaTeXStrings, Measures, Plots
 	using Serialization
@@ -69,7 +69,7 @@ module Figures
 		pyplot(size=(1000,600))
 	end
 
-	include("cLNA_figures.jl")
+	include("LPAC_figures.jl")
 end
 
 end # module

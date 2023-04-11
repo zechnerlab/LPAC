@@ -1,5 +1,5 @@
 #=
-cLNA Figures: code for defining the figures for the paper.
+LPAC Figures: code for defining the figures for the paper.
 =#
 
 @export function BinaryBirthDeathCoagulation(;
@@ -11,7 +11,7 @@ cLNA Figures: code for defining the figures for the paper.
 						name="bBDC_NM1",
 						readFromDump::Bool=true,
 						tightLayout::Bool=true,
-						palette::ColorPalette=cLNA.pal_custom,
+						palette::ColorPalette=LPAC.pal_custom,
 						)
 	M = Models.IEqCFBDq_new(; kC=0.01,kF=0,kE=0)
 	solverFlags = []
@@ -27,22 +27,22 @@ cLNA Figures: code for defining the figures for the paper.
 		### Compute the solutions
 		N0 = round(Int, M.Ω * N0)
 		Mpc0 = round(Int, M.Ωc * Mpc0)
-		clnaSolRaw = @time cLNAsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
+		lpacSolRaw = @time LPACsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
 		Msymb = popfirst!(setdiff(symbols, [:N,:N2]))
 		println("> $(name)::Running SSA simulations...")
 		nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
 					M, symbols...;
-					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, clnaSol=clnaSolRaw)
-		clnaSol = cLNA.convertSolution(clnaSolRaw, M.momentsMapping, M.sigmaMapping)
+					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, lpacSol=lpacSolRaw)
+		lpacSol = LPAC.convertSolution(lpacSolRaw, M.momentsMapping, M.sigmaMapping)
 		println("> $(name)::Serializing...")
-		solDump = [clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
+		solDump = [lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
         @time serialize(dumpFName, solDump)
     else
 		println("> $(name)::De-serializing...")
     	@time solDump = deserialize(dumpFName)
     end
     # Unpack dump
-    clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
+    lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
 	
 	### Plot the figure
 	println("> $(name)::Plotting...")
@@ -53,10 +53,10 @@ cLNA Figures: code for defining the figures for the paper.
         local tx, ty = -10mm, -2mm
 
 		pmN = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:N],
-								clnaSol.T, clnaSol.M[:N];
+								lpacSol.T, lpacSol.M[:N];
 								# ssaRibbon=ssaSDSol.M[:N],
 								ssaRibbon=ssaMeanSol.σ[:N],
-								clnaRibbon=clnaSol.σ[:N],
+								lpacRibbon=lpacSol.σ[:N],
 								color=palette[2],
 								label=L"N",
 								legend=:bottomright,
@@ -74,10 +74,10 @@ cLNA Figures: code for defining the figures for the paper.
             bg_inside=nothing,
             )
 		pmM = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:M¹],
-								clnaSol.T, clnaSol.M[:M¹];
+								lpacSol.T, lpacSol.M[:M¹];
 								# ssaRibbon=ssaSDSol.M[:M¹],
 								ssaRibbon=ssaMeanSol.σ[:M¹],
-								clnaRibbon=clnaSol.σ[:M¹],
+								lpacRibbon=lpacSol.σ[:M¹],
 								color=palette[3],
 								label=L"M^1",
 								legend=:bottomright,
@@ -122,7 +122,7 @@ end
 						name="bBDC_NM1",
 						readFromDump::Bool=true,
 						tightLayout::Bool=true,
-						palette::ColorPalette=cLNA.pal_custom,
+						palette::ColorPalette=LPAC.pal_custom,
 						fillalpha=0.3,
 						)
 	M = Models.IEqCFBDq_new(; kC=0.01,kF=0,kE=0)
@@ -139,22 +139,22 @@ end
 		### Compute the solutions
 		N0 = round(Int, M.Ω * N0)
 		Mpc0 = round(Int, M.Ωc * Mpc0)
-		clnaSolRaw = @time cLNAsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
+		lpacSolRaw = @time LPACsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
 		Msymb = popfirst!(setdiff(symbols, [:N,:N2]))
 		println("> $(name)::Running SSA simulations...")
 		nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
 					M, symbols...;
-					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, clnaSol=clnaSolRaw)
-		clnaSol = cLNA.convertSolution(clnaSolRaw, M.momentsMapping, M.sigmaMapping)
+					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, lpacSol=lpacSolRaw)
+		lpacSol = LPAC.convertSolution(lpacSolRaw, M.momentsMapping, M.sigmaMapping)
 		println("> $(name)::Serializing...")
-		solDump = [clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
+		solDump = [lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
         @time serialize(dumpFName, solDump)
     else
 		println("> $(name)::De-serializing...")
     	@time solDump = deserialize(dumpFName)
     end
     # Unpack dump
-    clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
+    lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
 	
 	### Plot the figure
 	println("> $(name)::Plotting...")
@@ -165,7 +165,7 @@ end
         local tx, ty = -10mm, -2mm
 
         pPH = plot1dPopulationHistogram(nPool; 
-        				clnaSol=clnaSol,
+        				lpacSol=lpacSol,
         				color=palette[3], 
         				linecolor=palette[3], 
 						fillalpha=fillalpha,
@@ -184,7 +184,7 @@ end
 							color=palette[2],
 							linecolor=palette[2],
 							fillalpha=fillalpha,
-							reference=clnaSol,
+							reference=lpacSol,
 							title="",
 							# showaxis=:x, 
 							xlabel=L"N",
@@ -202,7 +202,7 @@ end
 							color=palette[3],
 							linecolor=palette[3],
 							fillalpha=fillalpha,
-							reference=clnaSol,
+							reference=lpacSol,
 							title="",
 							# showaxis=:x,
 							xlabel=L"M^1",
@@ -243,7 +243,7 @@ end
 						name="SAIC",
 						readFromDump::Bool=true,
 						tightLayout::Bool=true,
-						palette::ColorPalette=cLNA.pal_custom,
+						palette::ColorPalette=LPAC.pal_custom,
 						)
 	Ms = [ Models.SAIC(; kref=1e1), Models.SAIC(; kref=4e1), Models.SAIC(; kref=2e1) ]
 	setpoints = [1000, 4000, 2000]
@@ -267,25 +267,25 @@ end
 		u0 = Ms[1].momentsInit(N0, Mpc0)
 		solutions = Vector{Solution}()
 		@time for (i,M) in enumerate(Ms)
-			clnaSolRaw = @time cLNAsolve(M, u0; T=T[i], MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
-			clnaSol = cLNA.convertSolution(clnaSolRaw, M.momentsMapping, M.sigmaMapping)
-			push!(solutions, clnaSol)
-			u0 = deepcopy(clnaSolRaw.u[end])
+			lpacSolRaw = @time LPACsolve(M, u0; T=T[i], MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
+			lpacSol = LPAC.convertSolution(lpacSolRaw, M.momentsMapping, M.sigmaMapping)
+			push!(solutions, lpacSol)
+			u0 = deepcopy(lpacSolRaw.u[end])
 		end
-		clnaSol = solcat(solutions...)
+		lpacSol = solcat(solutions...)
 		println("> $(name)::Running SSA simulations...")
 		nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
 						Ms, symbols...;
 						T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0)
 		println("> $(name)::Serializing...")
-		solDump = [clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
+		solDump = [lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
         @time serialize(dumpFName, solDump)
     else
 		println("> $(name)::De-serializing...")
     	@time solDump = deserialize(dumpFName)
     end
     # Unpack dump
-    clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
+    lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
 	
 	### Plot the figure
 	println("> $(name)::Plotting...")
@@ -296,10 +296,10 @@ end
         local tx, ty = -10mm, -2mm
 
 		pmN = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:N],
-								clnaSol.T, clnaSol.M[:N];
+								lpacSol.T, lpacSol.M[:N];
 								ssaRibbon=ssaMeanSol.σ[:N],
-								clnaRibbon=clnaSol.σ[:N],
-								clnaLabel=false,
+								lpacRibbon=lpacSol.σ[:N],
+								lpacLabel=false,
 								color=palette[2],
 								label=L"N",
 								legend=:bottomright,
@@ -320,10 +320,10 @@ end
             bg_inside=nothing,
             )
 		pmM = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:M¹⁰⁰],
-								clnaSol.T, clnaSol.M[:M¹⁰⁰];
+								lpacSol.T, lpacSol.M[:M¹⁰⁰];
 								ssaRibbon=ssaMeanSol.σ[:M¹⁰⁰],
-								clnaRibbon=clnaSol.σ[:M¹⁰⁰],
-								clnaLabel=false,
+								lpacRibbon=lpacSol.σ[:M¹⁰⁰],
+								lpacLabel=false,
 								color=palette[3],
 								# label=L"M^{1,0,0}",
 								label=L"Z_1",
@@ -334,10 +334,10 @@ end
 								# ylims=(0,399),
 								)
 		pmM = plotMeanComparisons!(pmM, ssaMeanSol.T, ssaMeanSol.M[:M⁰¹⁰],
-								clnaSol.T, clnaSol.M[:M⁰¹⁰];
+								lpacSol.T, lpacSol.M[:M⁰¹⁰];
 								ssaRibbon=ssaMeanSol.σ[:M⁰¹⁰],
-								clnaRibbon=clnaSol.σ[:M⁰¹⁰],
-								clnaLabel=false,
+								lpacRibbon=lpacSol.σ[:M⁰¹⁰],
+								lpacLabel=false,
 								color=palette[1],
 								# label=L"M^{0,1,0}",
 								label=L"Z_2",
@@ -345,10 +345,10 @@ end
 								# ylims=(0,399),
 								)
 		pmM = plotMeanComparisons!(pmM, ssaMeanSol.T, ssaMeanSol.M[:M⁰⁰¹],
-								clnaSol.T, clnaSol.M[:M⁰⁰¹];
+								lpacSol.T, lpacSol.M[:M⁰⁰¹];
 								ssaRibbon=ssaMeanSol.σ[:M⁰⁰¹],
-								clnaRibbon=clnaSol.σ[:M⁰⁰¹],
-								clnaLabel=false,
+								lpacRibbon=lpacSol.σ[:M⁰⁰¹],
+								lpacLabel=false,
 								color=palette[4],
 								# label=L"M^{0,0,1}",
 								label=L"Q",
@@ -356,8 +356,8 @@ end
 								# ylims=(0,399),
 								)
 		## Setpoint
-		SP = _getSetpointValues(clnaSol.T, T, setpoints)
-		pmM = plot!(pmM, clnaSol.T, SP, color="black", alpha=0.65, linestyle=:dot, label=L"Q^*")
+		SP = _getSetpointValues(lpacSol.T, T, setpoints)
+		pmM = plot!(pmM, lpacSol.T, SP, color="black", alpha=0.65, linestyle=:dot, label=L"Q^*")
 		## Shaded gray background
         pmM = vspan!(pmM, cumsum(T)[1:2], color="#585858", alpha=0.1, label=false)
 
@@ -396,7 +396,7 @@ end
 						name="SAIC",
 						readFromDump::Bool=true,
 						tightLayout::Bool=true,
-						palette::ColorPalette=cLNA.pal_custom,
+						palette::ColorPalette=LPAC.pal_custom,
 						fillalpha=0.3,
 						)
 	Ms = [ Models.SAIC(; kref=1e1), Models.SAIC(; kref=4e1), Models.SAIC(; kref=2e1) ]
@@ -421,25 +421,25 @@ end
 		u0 = Ms[1].momentsInit(N0, Mpc0)
 		solutions = Vector{Solution}()
 		@time for (i,M) in enumerate(Ms)
-			clnaSolRaw = @time cLNAsolve(M, u0; T=T[i], MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
-			clnaSol = cLNA.convertSolution(clnaSolRaw, M.momentsMapping, M.sigmaMapping)
-			push!(solutions, clnaSol)
-			u0 = deepcopy(clnaSolRaw.u[end])
+			lpacSolRaw = @time LPACsolve(M, u0; T=T[i], MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
+			lpacSol = LPAC.convertSolution(lpacSolRaw, M.momentsMapping, M.sigmaMapping)
+			push!(solutions, lpacSol)
+			u0 = deepcopy(lpacSolRaw.u[end])
 		end
-		clnaSol = solcat(solutions...)
+		lpacSol = solcat(solutions...)
 		println("> $(name)::Running SSA simulations...")
 		nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
 						Ms, symbols...;
 						T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0)
 		println("> $(name)::Serializing...")
-		solDump = [clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
+		solDump = [lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
         @time serialize(dumpFName, solDump)
     else
 		println("> $(name)::De-serializing...")
     	@time solDump = deserialize(dumpFName)
     end
     # Unpack dump
-    clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
+    lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
 	
 	### Plot the figure
 	println("> $(name)::Plotting...")
@@ -456,7 +456,7 @@ end
 							color=palette[3],
 							linecolor=palette[3],
 							fillalpha=fillalpha,
-							reference=clnaSol,
+							reference=lpacSol,
 							title="",
 							# showaxis=:x,
 							xlabel=L"Z_1",
@@ -473,7 +473,7 @@ end
 							color=palette[1],
 							linecolor=palette[1],
 							fillalpha=fillalpha,
-							reference=clnaSol,
+							reference=lpacSol,
 							title="",
 							# showaxis=:x,
 							xlabel=L"Z_2",
@@ -490,7 +490,7 @@ end
 							color=palette[2],
 							linecolor=palette[2],
 							fillalpha=fillalpha,
-							reference=clnaSol,
+							reference=lpacSol,
 							title="",
 							# showaxis=:x,
 							xlabel=L"N",
@@ -504,7 +504,7 @@ end
             bg_inside=nothing,
             )
 		pPHq = plot1dPopulationHistogram(nPool; 
-        				clnaSol=clnaSol,
+        				lpacSol=lpacSol,
         				color=palette[4], #TBC
         				linecolor=palette[4],
 						fillalpha=fillalpha,
@@ -524,7 +524,7 @@ end
 							color=palette[4],
 							linecolor=palette[4],
 							fillalpha=fillalpha,
-							reference=clnaSol,
+							reference=lpacSol,
 							title="",
 							# showaxis=:x,
 							xlabel=L"Q",
@@ -576,7 +576,7 @@ end
 						startPanel::Char='a',
 						isFirstRow::Bool=startPanel=='a',
 						isLastRow::Bool=true,
-						palette::ColorPalette=cLNA.pal_custom3,
+						palette::ColorPalette=LPAC.pal_custom3,
 						histofillalpha=0.3,
 						solverFlags...
 						)
@@ -605,22 +605,22 @@ end
 		### Compute the solutions
 		N0 = round(Int, M.Ω * N0)
 		Mpc0 = round(Int, M.Ωc * Mpc0)
-		clnaSolRaw = @time cLNAsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
+		lpacSolRaw = @time LPACsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
 		Msymb = popfirst!(setdiff(symbols, [:N,:N2]))
 		println("> $(name)::Running SSA simulations...")
 		nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
 					M, symbols...;
-					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, clnaSol=clnaSolRaw)
-		clnaSol = cLNA.convertSolution(clnaSolRaw, M.momentsMapping, M.sigmaMapping)
+					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, lpacSol=lpacSolRaw)
+		lpacSol = LPAC.convertSolution(lpacSolRaw, M.momentsMapping, M.sigmaMapping)
 		println("> $(name)::Serializing...")
-		solDump = [clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
+		solDump = [lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
         @time serialize(dumpFName, solDump)
     else
 		println("> $(name)::De-serializing...")
     	@time solDump = deserialize(dumpFName)
     end
     # Unpack dump
-    clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
+    lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
 	
 	### Plot the figure
 	println("> $(name)::Plotting...")
@@ -639,10 +639,10 @@ end
 		end
 
 		pmN = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:N],
-								clnaSol.T, clnaSol.M[:N];
+								lpacSol.T, lpacSol.M[:N];
 								# ssaRibbon=ssaSDSol.M[:N],
 								ssaRibbon=ssaMeanSol.σ[:N],
-								clnaRibbon=clnaSol.σ[:N],
+								lpacRibbon=lpacSol.σ[:N],
 								color=palette[1],
 								label=L"N",
 								legend=:bottomright,
@@ -671,7 +671,7 @@ end
 							color=palette[1], 
 							linecolor=palette[1], 
 							fillalpha=histofillalpha,
-							reference=clnaSol,
+							reference=lpacSol,
 							aspect_ratio=aspect_ratio,
 							# ylabel="Count",
 							# xlabel="Value",
@@ -683,10 +683,10 @@ end
 	    panel+=1
 
 		pmM10 = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:M¹⁰],
-								clnaSol.T, clnaSol.M[:M¹⁰];
+								lpacSol.T, lpacSol.M[:M¹⁰];
 								# ssaRibbon=ssaSDSol.M[:M¹⁰],
 								ssaRibbon=ssaMeanSol.σ[:M¹⁰],
-								clnaRibbon=clnaSol.σ[:M¹⁰],
+								lpacRibbon=lpacSol.σ[:M¹⁰],
 								color=palette[2],
 								label=L"M^{1,0}",
 								legend=:bottomright,
@@ -714,7 +714,7 @@ end
 						color=palette[2], 
 						linecolor=palette[2], 
 						fillalpha=histofillalpha,
-						reference=clnaSol,
+						reference=lpacSol,
 						aspect_ratio=aspect_ratio,
 						# ylabel="Count",
 						# xlabel="Value",
@@ -725,10 +725,10 @@ end
         panel+=1
 
 		pmM11 = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:M¹¹],
-								clnaSol.T, clnaSol.M[:M¹¹];
+								lpacSol.T, lpacSol.M[:M¹¹];
 								# ssaRibbon=ssaSDSol.M[:M¹¹],
 								ssaRibbon=ssaMeanSol.σ[:M¹¹],
-								# clnaRibbon=clnaSol.σ[:M¹¹],
+								# lpacRibbon=lpacSol.σ[:M¹¹],
 								color=palette[3],
 								label=L"M^{1,1}",
 								legend=:bottomright,
@@ -756,7 +756,7 @@ end
 						color=palette[3], 
 						linecolor=palette[3], 
 						fillalpha=histofillalpha,
-						reference=clnaSol,
+						reference=lpacSol,
 						aspect_ratio=aspect_ratio,
 						# ylabel="Count",
 						# xlabel="Value",
@@ -766,7 +766,7 @@ end
 						)
         panel+=1
 
-		pmMcorr = plotCorrelation(ssaMeanSol, clnaSol,
+		pmMcorr = plotCorrelation(ssaMeanSol, lpacSol,
 								ssaSD=ssaSDSol,
 								color=palette[4],
 								legend=tightCorrLegend ? :topleft : :bottomright,
@@ -792,12 +792,12 @@ end
 		if !tightCorrLegend
 			plot2dPopulationHistogram!(pmMcorr[3], nPool;
 				aspect_ratio=aspect_ratio,
-				clnaSol=clnaSol,
+				lpacSol=lpacSol,
 				)
 		else
 			plot2dPopulationHistogram!(pmMcorr[3], nPool;
 				aspect_ratio=aspect_ratio,
-				clnaSol=clnaSol,
+				lpacSol=lpacSol,
 				colorbar_ticks=nothing, # remove ticks and numbers from the colorbar #test
 				)
 		end
@@ -843,7 +843,7 @@ end
 						tightCorrLegend::Bool=false,
 						savePlots::Bool=true,
 						startPanel::Char='e',
-						palette::ColorPalette=cLNA.pal_custom3,
+						palette::ColorPalette=LPAC.pal_custom3,
 						solverFlags...
 						)
 	S = Dict(:stop=>0, :slow=>1e0, :mid=>1e1, :fast=>1e2, :faster=>1e3, :fastest=>1e4)
@@ -873,22 +873,22 @@ end
 			### Compute the solutions
 			N0 = round(Int, M.Ω * N0)
 			Mpc0 = round(Int, M.Ωc * Mpc0)
-			clnaSolRaw = @time cLNAsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
+			lpacSolRaw = @time LPACsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
 			Msymb = popfirst!(setdiff(symbols, [:N,:N2]))
 			println("> $(name)::Running SSA simulations...")
 			nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
 						M, symbols...;
-						T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, clnaSol=clnaSolRaw)
-			clnaSol = cLNA.convertSolution(clnaSolRaw, M.momentsMapping, M.sigmaMapping)
+						T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, lpacSol=lpacSolRaw)
+			lpacSol = LPAC.convertSolution(lpacSolRaw, M.momentsMapping, M.sigmaMapping)
 			println("> $(name)::Serializing...")
-			solDump = [clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
+			solDump = [lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
 	        @time serialize(dumpFName, solDump)
 	    else
 			println("> $(name)::De-serializing...")
 	    	@time solDump = deserialize(dumpFName)
 	    end
 	    # Unpack dump
-	    clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
+	    lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
 		
 		### Plot the figure
 		println("> $(name)::Plotting...")
@@ -902,7 +902,7 @@ end
 	        # local jx, jy, jw, jh = 0.1, 0.025, 0.5, 0.46
 	        local jx, jy, jw, jh = 0.1, 0.025, 0.45, 0.33
 
-			pmMcorr = plotCorrelation(ssaMeanSol, clnaSol,
+			pmMcorr = plotCorrelation(ssaMeanSol, lpacSol,
 									ssaSD=ssaSDSol,
 									color=palette[4],
 									# legend=tightCorrLegend ? :topleft : :bottomright,
@@ -941,7 +941,7 @@ end
 			# @show extrema(nPool[2,:]) #debug
 			plot2dPopulationHistogram!(pmMcorr[3], nPool;
 				aspect_ratio=aspect_ratio,
-				clnaSol=clnaSol,
+				lpacSol=lpacSol,
 				# s1Label=nothing, s2Label=nothing,
 				# colorbar = false,
 				colorbar_ticks=nothing, # see https://github.com/JuliaPlots/Plots.jl/issues/3174#issuecomment-806313344
@@ -1160,22 +1160,22 @@ end
 		### Compute the solutions
 		N0 = round(Int, M.Ω * N0)
 		Mpc0 = round(Int, M.Ωc * Mpc0)
-		clnaSolRaw = @time cLNAsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
+		lpacSolRaw = @time LPACsolve(M; T=T, N0=N0, Mpc0=Mpc0, MMap=M.momentsMapping, σMap=M.sigmaMapping, solverFlags...)
 		Msymb = popfirst!(setdiff(symbols, [:N,:N2]))
 		println("> $(name)::Running SSA simulations...")
 		nPool, trajectories, ssaMeanSol, ssaSDSol = runSSASimulations(
 					M, symbols...;
-					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, clnaSol=clnaSolRaw)
-		clnaSol = cLNA.convertSolution(clnaSolRaw, M.momentsMapping, M.sigmaMapping)
+					T=T, NSSA=NSSA, RSSA=RSSA, N0=N0, Mpc0=Mpc0, lpacSol=lpacSolRaw)
+		lpacSol = LPAC.convertSolution(lpacSolRaw, M.momentsMapping, M.sigmaMapping)
 		println("> $(name)::Serializing...")
-		solDump = [clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
+		solDump = [lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol]
         @time serialize(dumpFName, solDump)
     else
 		println("> $(name)::De-serializing...")
     	@time solDump = deserialize(dumpFName)
     end
     # Unpack dump
-    clnaSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
+    lpacSol, nPool, trajectories, ssaMeanSol, ssaSDSol = solDump
 	
 	### Plot the figure
 	println("> $(name)::Plotting...")
@@ -1190,11 +1190,11 @@ end
 	    local jx, jy, jw, jh = 0.05, 0.025, 0.45, 0.33
 
 		pmN = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:N],
-								clnaSol.T, clnaSol.M[:N];
+								lpacSol.T, lpacSol.M[:N];
 								# ssaRibbon=ssaSDSol.M[:N],
 								ssaRibbon=ssaMeanSol.σ[:N],
-								clnaRibbon=clnaSol.σ[:N],
-								color=cLNA.pal_custom3[1],
+								lpacRibbon=lpacSol.σ[:N],
+								color=LPAC.pal_custom3[1],
 								label=L"N",
 								legend=:bottomright,
 								title=L"N",
@@ -1219,8 +1219,8 @@ end
 	            ticks=nothing,
 	            )
 	        pmN = plotMomentsHistogram!(pmN[3], M, trajectories, :N; #...and fill the box with the histogram
-							color=cLNA.pal_custom3[1], 
-							reference=clnaSol,
+							color=LPAC.pal_custom3[1], 
+							reference=lpacSol,
 							aspect_ratio=aspect_ratio,
 							# ylabel="Count",
 							# xlabel="Value",
@@ -1231,11 +1231,11 @@ end
 	    end
 
 		pmM10 = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:M¹⁰],
-								clnaSol.T, clnaSol.M[:M¹⁰];
+								lpacSol.T, lpacSol.M[:M¹⁰];
 								# ssaRibbon=ssaSDSol.M[:M¹⁰],
 								ssaRibbon=ssaMeanSol.σ[:M¹⁰],
-								clnaRibbon=clnaSol.σ[:M¹⁰],
-								color=cLNA.pal_custom3[2],
+								lpacRibbon=lpacSol.σ[:M¹⁰],
+								color=LPAC.pal_custom3[2],
 								label=L"M^{1,0}",
 								legend=:topleft,
 								title=L"M^{1,0}",
@@ -1259,8 +1259,8 @@ end
             ticks=nothing,
             )
         plotMomentsHistogram!(pmM10[3], M, trajectories, :M¹⁰; #...and fill the box with the histogram
-						color=cLNA.pal_custom3[2], 
-						reference=clnaSol,
+						color=LPAC.pal_custom3[2], 
+						reference=lpacSol,
 						aspect_ratio=aspect_ratio,
 						# ylabel="Count",
 						# xlabel="Value",
@@ -1270,11 +1270,11 @@ end
 						)
 
 		pmM11 = plotMeanComparisons(ssaMeanSol.T, ssaMeanSol.M[:M¹¹],
-								clnaSol.T, clnaSol.M[:M¹¹];
+								lpacSol.T, lpacSol.M[:M¹¹];
 								# ssaRibbon=ssaSDSol.M[:M¹¹],
 								ssaRibbon=ssaMeanSol.σ[:M¹¹],
-								# clnaRibbon=clnaSol.σ[:M¹¹],
-								color=cLNA.pal_custom3[3],
+								# lpacRibbon=lpacSol.σ[:M¹¹],
+								color=LPAC.pal_custom3[3],
 								label=L"M^{1,1}",
 								legend=:topleft,
 								title=L"M^{1,1}",
@@ -1298,8 +1298,8 @@ end
             ticks=nothing,
             )
         plotMomentsHistogram!(pmM11[3], M, trajectories, :M¹¹; #...and fill the box with the histogram
-						color=cLNA.pal_custom3[3], 
-						reference=clnaSol,
+						color=LPAC.pal_custom3[3], 
+						reference=lpacSol,
 						aspect_ratio=aspect_ratio,
 						# ylabel="Count",
 						# xlabel="Value",
@@ -1308,9 +1308,9 @@ end
 						showaxis=:x,
 						)
 
-		pmMcorr = plotCorrelation(ssaMeanSol, clnaSol,
+		pmMcorr = plotCorrelation(ssaMeanSol, lpacSol,
 								ssaSD=ssaSDSol,
-								color=cLNA.pal_custom3[4],
+								color=LPAC.pal_custom3[4],
 								legend=tightCorrLegend ? :topleft : :bottomright,
 								tightLegend=tightCorrLegend,
 								title="Correlation",
@@ -1334,7 +1334,7 @@ end
 		plot2dPopulationHistogram!(pmMcorr[3], nPool;
 			aspect_ratio=aspect_ratio,
 			colorbar_ticks=nothing, # see https://github.com/JuliaPlots/Plots.jl/issues/3174#issuecomment-806313344
-			clnaSol=clnaSol,
+			lpacSol=lpacSol,
 			)
 
 		p = plot(pmN, pmM10, pmM11, pmMcorr, 
