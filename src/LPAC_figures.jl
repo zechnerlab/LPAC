@@ -1361,20 +1361,20 @@ end
 	return p
 end
 
-@export function generateAllFigures(; savepath=".", readFromDump::Bool=true)
-	Figures.BinaryBirthDeathCoagulation(; NSSA=100, RSSA=1, savepath=savepath, readFromDump=readFromDump)
-	Figures.BinaryBirthDeathCoagulationHistograms(; NSSA=100, RSSA=1, savepath=savepath, readFromDump=readFromDump)
-	Figures.SAIC(; T=200, NSSA=8, RSSA=1, savepath=savepath, readFromDump=readFromDump)
-	Figures.SAICHistograms(; T=200, NSSA=8, RSSA=1, savepath=savepath, readFromDump=readFromDump)
+@export function generateAllFigures(; savepath="./Figures", readFromDump::Bool=true)
+	Figures.BinaryBirthDeathCoagulation(; NSSA=100, RSSA=1, savepath="$(savepath)/BinaryBirthDeathCoagulation", readFromDump=readFromDump)
+	Figures.BinaryBirthDeathCoagulationHistograms(; NSSA=100, RSSA=1, savepath="$(savepath)/BinaryBirthDeathCoagulation", readFromDump=readFromDump)
+	Figures.SAIC(; T=200, NSSA=8, RSSA=1, savepath="$(savepath)/SAIC", readFromDump=readFromDump)
+	Figures.SAICHistograms(; T=200, NSSA=8, RSSA=1, savepath="$(savepath)/SAIC", readFromDump=readFromDump)
 	# return nothing
 	for s in reverse([:stop,:slow,:mid,:fast,:faster,:fastest])
 		Figures.MutualRepression(; speed=s, N0=25, N=50, kMR=10, T=50, NSSA=128, 
-			savepath="$(savepath)/kMR10_Lite2", readFromDump=readFromDump, tightLayout=true, fontscale=1.4)
+			savepath="$(savepath)/MutualRepression", readFromDump=readFromDump, tightLayout=true, fontscale=1.4)
 	end
 	Figures.MutualRepressionCorrelationsCombine(; N0=25, N=50, kMR=10, T=50, NSSA=128, 
-		savepath="$(savepath)/kMR10_Lite2", readFromDump=true, tightLayout=true, fontscale=1.4)
+		savepath="$(savepath)/MutualRepression", readFromDump=true, tightLayout=true, fontscale=1.4)
 	Figures.MutualRepressionCorrelationComparison(; N0=25, N=50, kMR=10, T=50, NSSA=128, 
-		savepath="$(savepath)/kMR10_Lite2", readFromDump=true, tightLayout=true, fontscale=1.4)
+		savepath="$(savepath)/MutualRepression", readFromDump=true, tightLayout=true, fontscale=1.4)
 	return nothing
 end
 
