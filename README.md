@@ -31,14 +31,11 @@ The functions generating the figures for the paper are available in the
 `LPAC.Figures` submodule.  
 They can be generated with the following:
 ```
-julia -p auto
+julia --project
 ```
 and
 ```julia
-import Pkg
-Pkg.activate(".")
 using LPAC
-
 Figures.generateAllFigures()
 ```
 This uses the same serialized simulation results that we used for generating the paper figures,
